@@ -1,3 +1,3 @@
-provider "scaffolding" {
+provider "skopeo2" {
   # example configuration here
 }

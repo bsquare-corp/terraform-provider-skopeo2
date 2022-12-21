@@ -20,7 +20,7 @@ import (
 var (
 	// these will be set by the goreleaser configuration
 	// to appropriate values for the compiled binary
-	version string = "dev"
+	version string = "0.0.1"
 
 	// goreleaser can also pass the specific commit if you want
 	// commit  string = ""
@@ -36,7 +36,7 @@ func main() {
 		Debug: debugMode,
 
 		// TODO: update this string with the full name of your provider as used in your configs
-		ProviderAddr: "registry.terraform.io/hashicorp/scaffolding",
+		ProviderAddr: "registry.terraform.io/bsquare-corp/skopeo2",
 
 		ProviderFunc: provider.New(version),
 	}

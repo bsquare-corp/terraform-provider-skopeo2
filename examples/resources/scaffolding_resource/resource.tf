@@ -1,3 +1,3 @@
-resource "scaffolding_resource" "example" {
+resource "skopeo2_resource" "example" {
   sample_attribute = "foo"
 }
