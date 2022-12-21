@@ -1,4 +1,4 @@
-module github.com/hashicorp/terraform-provider-scaffolding
+module github.com/bsquare-corp/terraform-provider-skopeo2
 
 go 1.18
 

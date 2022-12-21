@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 
+	"github.com/bsquare-corp/terraform-provider-skopeo2/internal/provider"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
-	"github.com/hashicorp/terraform-provider-scaffolding/internal/provider"
 )
 
 // Run "go generate" to format example terraform files and generate the docs for the registry/website
