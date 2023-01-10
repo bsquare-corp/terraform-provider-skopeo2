@@ -15,7 +15,7 @@ provider "skopeo2" {
 }
 
 resource "skopeo2_copy" "example" {
-  source_image = "docker://foo:latest"
+  source_image      = "docker://foo:latest"
   destination_image = "docker://bar:latest"
-  preserve_digests = true
+  preserve_digests  = true
 }
