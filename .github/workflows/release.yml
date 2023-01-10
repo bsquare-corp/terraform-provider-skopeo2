@@ -21,9 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       -
-        name: Install build dependencies
-        run: sudo apt-get update && sudo apt install -y btrfs-progs-devel
-      -
         name: Checkout
         uses: actions/checkout@v3
       -

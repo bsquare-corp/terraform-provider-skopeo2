@@ -23,9 +23,6 @@ jobs:
     timeout-minutes: 5
     steps:
 
-    - name: Install build dependencies
-      run: sudo apt-get update && sudo apt install -y btrfs-progs-devel
-
     - name: Check out code into the Go module directory
       uses: actions/checkout@v3
 
@@ -77,9 +74,6 @@ jobs:
           - '1.1.*'
           - '1.2.*'
     steps:
-
-    - name: Install build dependencies
-      run: sudo apt-get update && sudo apt install -y btrfs-progs-devel
 
     - name: Check out code into the Go module directory
       uses: actions/checkout@v3
