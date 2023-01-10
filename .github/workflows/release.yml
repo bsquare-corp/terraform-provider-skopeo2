@@ -24,10 +24,10 @@ jobs:
         name: Checkout
         uses: actions/checkout@v3
       -
-        name: Install libbtrfs-dev
+        name: Install libbtrfs-dev, libgpgme-dev
         run: |
           sudo apt-get update
-          sudo apt-get install libbtrfs-dev
+          sudo apt-get install libbtrfs-dev libgpgme-dev
       -
         name: Unshallow
         run: git fetch --prune --unshallow
