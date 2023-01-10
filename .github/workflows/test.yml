@@ -26,10 +26,10 @@ jobs:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v3
 
-    - name: Install libbtrfs-dev, libgpgme-dev
+    - name: Install libbtrfs-dev, libgpgme-dev, libdevmapper-dev
       run: |
         sudo apt-get update
-        sudo apt-get install libbtrfs-dev libgpgme-dev
+        sudo apt-get install libbtrfs-dev libgpgme-dev libdevmapper-dev
 
     - name: Set up Go
       uses: actions/setup-go@v3
@@ -50,10 +50,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Install libbtrfs-dev, libgpgme-dev
+      - name: Install libbtrfs-dev, libgpgme-dev, libdevmapper-dev
         run: |
           sudo apt-get update
-          sudo apt-get install libbtrfs-dev libgpgme-dev
+          sudo apt-get install libbtrfs-dev libgpgme-dev libdevmapper-dev
       - uses: actions/setup-go@v3
         with:
           go-version-file: 'go.mod'
@@ -87,10 +87,10 @@ jobs:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v3
 
-    - name: Install libbtrfs-dev, libgpgme-dev
+    - name: Install libbtrfs-dev, libgpgme-dev, libdevmapper-dev
       run: |
         sudo apt-get update
-        sudo apt-get install libbtrfs-dev libgpgme-dev
+        sudo apt-get install libbtrfs-dev libgpgme-dev libdevmapper-dev
 
     - name: Set up Go
       uses: actions/setup-go@v3
