@@ -21,11 +21,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       -
-        name: Install build dependencies
-        run: sudo apt-get update && sudo apt install -y btrfs-progs-devel
-      -
         name: Checkout
         uses: actions/checkout@v3
+      -
+        name: Install libbtrfs-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install libbtrfs-dev
       -
         name: Unshallow
         run: git fetch --prune --unshallow
