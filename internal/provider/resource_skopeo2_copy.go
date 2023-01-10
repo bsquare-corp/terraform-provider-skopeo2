@@ -32,7 +32,7 @@ Supported transports:
 func resourceSkopeo2Copy() *schema.Resource {
 	return &schema.Resource{
 		// This description is used by the documentation generator and the language server.
-		Description: "Sample resource in the Terraform provider skopeo2.",
+		Description: "Copy resource in the Terraform provider skopeo2.",
 
 		CreateContext: resourceSkopeo2CopyCreate,
 		ReadContext:   resourceSkopeo2CopyRead,

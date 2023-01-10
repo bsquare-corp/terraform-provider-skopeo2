@@ -3,12 +3,12 @@
 page_title: "skopeo2_copy Resource - terraform-provider-skopeo2"
 subcategory: ""
 description: |-
-  Sample resource in the Terraform provider skopeo2.
+  Copy resource in the Terraform provider skopeo2.
 ---
 
 # skopeo2_copy (Resource)
 
-Sample resource in the Terraform provider skopeo2.
+Copy resource in the Terraform provider skopeo2.
 
 
 
