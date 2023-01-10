@@ -24,7 +24,7 @@ jobs:
     steps:
 
     - name: Install build dependencies
-      run: sudo apt-get update && sudo apt install -y btrfs-progs-devel
+      run: sudo apt-get update && sudo apt install -y libbtrfs-dev btrfs-progs
 
     - name: Check out code into the Go module directory
       uses: actions/checkout@v3
@@ -79,7 +79,7 @@ jobs:
     steps:
 
     - name: Install build dependencies
-      run: sudo apt-get update && sudo apt install -y btrfs-progs-devel
+      run: sudo apt-get update && sudo apt install -y libbtrfs-dev btrfs-progs
 
     - name: Check out code into the Go module directory
       uses: actions/checkout@v3
