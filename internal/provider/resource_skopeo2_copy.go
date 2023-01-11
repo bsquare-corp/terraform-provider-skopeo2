@@ -74,8 +74,9 @@ func resourceSkopeo2Copy() *schema.Resource {
 				Description: "fail if we cannot preserve the source digests in the destination image.",
 			},
 			"docker_digest": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "digest string for the destination image.",
 			},
 		},
 	}
