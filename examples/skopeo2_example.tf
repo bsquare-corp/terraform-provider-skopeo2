@@ -3,7 +3,7 @@ terraform {
   required_providers {
     skopeo2 = {
       source  = "bsquare-corp/skopeo2"
-      version = "~> 0.0.0"
+      version = "0.0.3"
     }
   }
 
@@ -15,7 +15,11 @@ provider "skopeo2" {
 }
 
 resource "skopeo2_copy" "example" {
-  source_image      = "docker://foo:latest"
-  destination_image = "docker://bar:latest"
-  preserve_digests  = true
+  source {
+    image = "docker://foo:latest"
+  }
+  destination {
+    image = "docker://bar:latest"
+  }
+  preserve_digests = true
 }

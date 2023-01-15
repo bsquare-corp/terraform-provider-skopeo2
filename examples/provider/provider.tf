@@ -1,6 +1,6 @@
 terraform {
   required_providers {
-    aws = {
+    skopeo2 = {
       source  = "bsquare-corp/skopeo2"
       version = "~> 0.0.0"
     }

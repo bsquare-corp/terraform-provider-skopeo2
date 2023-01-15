@@ -31,6 +31,7 @@ type DockerImageOptions struct {
 	Global         *GlobalOptions      // May be shared across several imageOptions instances.
 	Shared         *SharedImageOptions // May be shared across several imageOptions instances.
 	AuthFilePath   string              // Path to a */containers/auth.json (prefixed version to override shared image option).
+	Insecure       bool                // Allow accessing non TLS registry
 	credsOption    string              // username[:password] for accessing a registry
 	userName       string              // username for accessing a registry
 	password       string              // password for accessing a registry
@@ -54,6 +55,11 @@ func (opts *ImageOptions) NewSystemContext() (*types.SystemContext, error) {
 	//  imageOptions option overrides the instance if both are present.
 	ctx := opts.Global.newSystemContext()
 	ctx.DockerCertPath = opts.dockerCertPath
+	if opts.Insecure {
+		ctx.DockerInsecureSkipTLSVerify = types.OptionalBoolTrue
+	} else {
+		ctx.DockerInsecureSkipTLSVerify = types.OptionalBoolFalse
+	}
 	ctx.OCISharedBlobDirPath = opts.sharedBlobDir
 	ctx.AuthFilePath = opts.Shared.authFilePath
 	ctx.DockerDaemonHost = opts.dockerDaemonHost

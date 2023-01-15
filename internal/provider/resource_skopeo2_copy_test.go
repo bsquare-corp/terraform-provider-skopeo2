@@ -33,8 +33,6 @@ func handleRequestAndRedirect(res http.ResponseWriter, req *http.Request) {
 }
 
 func TestAccResourceSkopeo2(t *testing.T) {
-	/* TODO Testing is broken!! This needs to be fixed! */
-	t.Skip("Testing is broken!! This needs to be fixed!")
 	t.Parallel()
 
 	rName := acctest.RandStringFromCharSet(10, acctest.CharSetAlphaNum)
@@ -55,32 +53,65 @@ func TestAccResourceSkopeo2(t *testing.T) {
 					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_%s", rName), "docker_digest"),
 				),
 			},
-			/*
-				{
-					Config: testAccResourceSkopeo2,
-					Check: resource.ComposeTestCheckFunc(
-						resource.TestMatchResourceAttr(
-							"skopeo2_copy.foo", "source_image", regexp.MustCompile("^docker:bar")),
-					),
-				},
-
-			*/
+			{
+				Config: testAccCopyResource_withRetry(rName),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_%s", rName), "docker_digest"),
+				),
+			},
 		},
 	})
 }
 
 func testAccCopyResource(name string) string {
 	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_%s" {
-	source_image      = "docker://alpine"
-	destination_image = "docker://ghcr.io/bsquare-corp/alpine"
+    source {
+	  image = "docker://alpine"
+    }
+    destination {
+	  image = "docker://localhost:5000/alpine"
+    }
+    insecure = true
+}`, name)
+}
+
+func testAccCopyResource_loginSource(name string) string {
+	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_%s" {
+    source {
+	  image         = "docker://753989949864.dkr.ecr.us-west-1.amazonaws.com/blib/deployed-container-scanner-trivy:latest"
+      login_script = "aws --profile bsquare-jenkins2 ecr get-login-password --region us-west-1 | docker login --username AWS --password-stdin 753989949864.dkr.ecr.us-west-1.amazonaws.com"
+    }
+    destination {
+	  image = "docker://localhost:5000/deployed-container-scanner-trivy"
+    }
+    insecure = true
+}`, name)
+}
+
+func testAccCopyResource_withRetry(name string) string {
+	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_%s" {
+    source {
+	  image = "docker://alpine"
+    }
+    destination {
+	  image = "docker://localhost:5000/alpine"
+    }
+    retries = 2
+    retry_delay = 30
+    insecure = true
 }`, name)
 }
 
 func testAccCopyResource_addTag(name string) string {
 	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_%s" {
-	source_image      = "docker://alpine"
-	destination_image = "docker://ghcr.io/bsquare-corp/alpine"
+    source {
+	  image = "docker://alpine"
+    }
+    destination {
+	  image = "docker://localhost:5000/alpine"
+    }
 	additional_tags   = ["alpine:fine"]
 	keep_image        = true
+    insecure          = true
 }`, name)
 }

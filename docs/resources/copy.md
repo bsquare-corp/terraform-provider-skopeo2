@@ -14,9 +14,30 @@ Copy resource in the Terraform provider skopeo2.
 
 ```terraform
 resource "skopeo2_copy" "example" {
-  source_image      = "<source image>"
-  destination_image = "<dest image>"
-  preserve_digests  = true
+  source {
+    image         = "docker://753989949864.dkr.ecr.us-west-1.amazonaws.com/blib/deployed-container-scanner-trivy:latest"
+    login_script  = "aws --profile $MY_PROFILE ecr get-login-password --region us-west-1 | docker login --username AWS --password-stdin 753989949864.dkr.ecr.us-west-1.amazonaws.com"
+    login_retries = 3
+    login_environment = {
+      MY_PROFILE = "bsquare-jenkins2"
+    }
+    login_script_interpreter = ["/bin/sh", "-c"]
+  }
+  destination {
+    image         = "docker://329020582682.dkr.ecr.us-west-2.amazonaws.com/blib/deployed-container-scanner-trivy:latest"
+    login_script  = "aws --profile $MY_PROFILE ecr get-login-password --region us-west-1 | docker login --username AWS --password-stdin 753989949864.dkr.ecr.us-west-1.amazonaws.com"
+    login_retries = 3
+    login_environment = {
+      MY_PROFILE = "bsquare-jenkins2"
+    }
+    login_script_interpreter = ["/bin/sh", "-c"]
+  }
+  insecure         = false
+  preserve_digests = true
+  retries          = 3
+  retry_delay      = 10
+  additional_tags  = ["deployed-container-scanner-trivy:my-tag"]
+  keep_image       = false
 }
 ```
 
@@ -25,25 +46,59 @@ resource "skopeo2_copy" "example" {
 
 ### Required
 
-- `destination_image` (String) specified as a "transport":"details" format.
-
-Supported transports:
-`containers-storage`, `dir`, `docker`, `docker-archive`, `docker-daemon`, `oci`, `oci-archive`, `ostree`, `sif`, `tarball`.
-When working with GitHub Container registry `keep_image` needs to be set to `true`.
-- `source_image` (String) specified as a "transport":"details" format.
-
-Supported transports:
-`containers-storage`, `dir`, `docker`, `docker-archive`, `docker-daemon`, `oci`, `oci-archive`, `ostree`, `sif`, `tarball`
+- `destination` (Block List, Min: 1, Max: 1) (see [below for nested schema](#nestedblock--destination))
+- `source` (Block List, Min: 1, Max: 1) Copy an IMAGE-NAME from one location to another (see [below for nested schema](#nestedblock--source))
 
 ### Optional
 
 - `additional_tags` (List of String) additional tags (supports docker-archive)
+- `insecure` (Boolean) allow access to non-TLS insecure repositories.
 - `keep_image` (Boolean) keep image when Resource gets deleted. This currently needs to be set to `true` when working with GitHub Container registry.
 - `preserve_digests` (Boolean) fail if we cannot preserve the source digests in the destination image.
+- `retries` (Number) Retry the copy operation following transient failure. Retrying following access failure error is configured through login_retries.
+- `retry_delay` (Number) Delay between retry attempts, in seconds.
 
 ### Read-Only
 
 - `docker_digest` (String) digest string for the destination image.
 - `id` (String) The ID of this resource.
+
+<a id="nestedblock--destination"></a>
+### Nested Schema for `destination`
+
+Required:
+
+- `image` (String) specified as a "transport":"details" format.
+
+Supported transports:
+`containers-storage`, `dir`, `docker`, `docker-archive`, `docker-daemon`, `oci`, `oci-archive`, `ostree`, `sif`, `tarball`.
+When working with GitHub Container registry `keep_image` needs to be set to `true`.
+
+Optional:
+
+- `login_environment` (Map of String)
+- `login_retries` (Number) Either if the login_script reports failure with non-exit code, or if following successful login the copy operation fails, retry this number of times.
+- `login_script` (String) Command to be executed by the login_script_interpreter to authenticate following skopeo operations
+- `login_script_interpreter` (List of String) The interpreter used to execute the script, defaults to ["/bin/sh", "-c"]
+- `working_directory` (String)
+
+
+<a id="nestedblock--source"></a>
+### Nested Schema for `source`
+
+Required:
+
+- `image` (String) specified as a "transport":"details" format.
+
+Supported transports:
+`containers-storage`, `dir`, `docker`, `docker-archive`, `docker-daemon`, `oci`, `oci-archive`, `ostree`, `sif`, `tarball`
+
+Optional:
+
+- `login_environment` (Map of String)
+- `login_retries` (Number) Either if the login_script reports failure with non-exit code, or if following successful login the copy operation fails, retry this number of times.
+- `login_script` (String) Command to be executed by the login_script_interpreter to authenticate following skopeo operations
+- `login_script_interpreter` (List of String) The interpreter used to execute the script, defaults to ["/bin/sh", "-c"]
+- `working_directory` (String)
 
 
