@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
@@ -44,74 +45,229 @@ func TestAccResourceSkopeo2(t *testing.T) {
 			{
 				Config: testAccCopyResource(rName),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_%s", rName), "docker_digest"),
+					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_copy_resource_%s", rName),
+						"docker_digest"),
 				),
+			},
+			{
+				Config:      testAccCopyResourceFail(rName),
+				ExpectError: expectErrorRegExpr("requested access to the resource is denied"),
+			},
+			{
+				Config:      testAccCopyBadResourceFail(rName),
+				ExpectError: expectErrorRegExpr("Invalid image name"),
+			},
+			{
+				Config:      testAccCopyResourceLoginFail(rName),
+				ExpectError: expectErrorRegExpr("Login script failed"),
 			},
 			{
 				Config: testAccCopyResource_addTag(rName),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_%s", rName), "docker_digest"),
+					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_add_tag_%s", rName),
+						"docker_digest"),
 				),
 			},
 			{
 				Config: testAccCopyResource_withRetry(rName),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_%s", rName), "docker_digest"),
+					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_with_retry_%s", rName),
+						"docker_digest"),
 				),
 			},
+			{
+				Config: testAccCopyResource_multipleRetry(rName),
+				Check: resource.ComposeTestCheckFunc(
+					resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_multiple_retry_%s", rName),
+							"docker_digest"),
+						resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_multiple_retry_2_%s",
+							rName), "docker_digest"),
+						resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_multiple_retry_3_%s",
+							rName), "docker_digest"),
+						resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_multiple_retry_4_%s",
+							rName), "docker_digest"),
+					),
+				),
+			},
+			/*
+				{ // TODO Login source can only be executed with an actual AWS account
+					Config: testAccCopyResource_loginSource(rName),
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_login_source_%s", rName),
+							"docker_digest"),
+					),
+				},
+			*/
 		},
 	})
 }
 
+func expectErrorRegExpr(expr string) *regexp.Regexp {
+	re, _ := regexp.Compile(expr)
+	return re
+}
+
 func testAccCopyResource(name string) string {
-	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_%s" {
+	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_copy_resource_%s" {
     source {
 	  image = "docker://alpine"
     }
     destination {
-	  image = "docker://localhost:5000/alpine"
+	  image = "docker://localhost:5000/alpine-copy-resource-%s"
     }
     insecure = true
-}`, name)
+}`, name, name)
+}
+
+func testAccCopyResourceFail(name string) string {
+	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_resource_fail_%s" {
+    source {
+	  image = "docker://alpine-bad"
+      login_retries = 3
+    }
+    destination {
+	  image = "docker://localhost:5000/alpine-resource-fail-%s"
+      login_retries = 3
+    }
+    insecure = true
+}`, name, name)
+}
+
+func testAccCopyBadResourceFail(name string) string {
+	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_bad_resource_%s" {
+    source {
+	  image = "cocker://alpine-bad"
+    }
+    destination {
+	  image = "docker://localhost:5000/alpine-bad-resource-%s"
+    }
+    insecure = true
+}`, name, name)
+}
+
+func testAccCopyResourceLoginFail(name string) string {
+	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_login_fail_%s" {
+    source {
+	  image = "docker://alpine-bad"
+      login_script = "false"
+    }
+    destination {
+	  image = "docker://localhost:5000/alpine-login-fail-%s"
+      login_script = "false"
+    }
+    insecure = true
+}`, name, name)
 }
 
 func testAccCopyResource_loginSource(name string) string {
-	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_%s" {
+	return fmt.Sprintf(`
+resource "skopeo2_copy" "alpine_login_source_%s" {
     source {
-	  image         = "docker://753989949864.dkr.ecr.us-west-1.amazonaws.com/blib/deployed-container-scanner-trivy:latest"
+	  image         = "docker://753989949864.dkr.ecr.us-west-1.amazonaws.com/ecr-public/docker/library/alpine"
       login_script = "aws --profile bsquare-jenkins2 ecr get-login-password --region us-west-1 | docker login --username AWS --password-stdin 753989949864.dkr.ecr.us-west-1.amazonaws.com"
     }
     destination {
-	  image = "docker://localhost:5000/deployed-container-scanner-trivy"
+	  image = "docker://localhost:5000/alpine-login-source-%s"
     }
     insecure = true
-}`, name)
+}
+
+resource "skopeo2_copy" "alpine_login_source_2_%s" {
+    source {
+	  image         = "docker://753989949864.dkr.ecr.us-west-2.amazonaws.com/ecr-public/docker/library/alpine"
+      login_script  = "aws --profile bsquare-jenkins2 ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 753989949864.dkr.ecr.us-west-2.amazonaws.com"
+      login_retries = 3
+    }
+    destination {
+	  image = "docker://localhost:5000/alpine-login-source-2-%s"
+      login_retries = 3
+    }
+    insecure = true
+}
+`, name, name, name, name)
 }
 
 func testAccCopyResource_withRetry(name string) string {
-	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_%s" {
+	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_with_retry_%s" {
     source {
 	  image = "docker://alpine"
     }
     destination {
-	  image = "docker://localhost:5000/alpine"
+	  image = "docker://localhost:5000/alpine-with-retry-%s"
     }
     retries = 2
     retry_delay = 30
     insecure = true
-}`, name)
+}`, name, name)
+}
+
+func testAccCopyResource_multipleRetry(name string) string {
+	return fmt.Sprintf(`
+resource "skopeo2_copy" "alpine_multiple_retry_%s" {
+    source {
+	  image = "docker://alpine"
+      login_retries = 3
+    }
+    destination {
+	  image = "docker://localhost:5000/alpine-multiple-retry-%s"
+	  login_script = "if test -f /tmp/alpine-%s; then exit 0; else touch /tmp/alpine-%s; exit 1; fi"
+      login_retries = 3
+    }
+    insecure = true
+}
+
+resource "skopeo2_copy" "alpine_multiple_retry_2_%s" {
+    source {
+	  image = "docker://alpine"
+	  login_script = "if test -f /tmp/alpine-2-%s; then exit 0; else touch /tmp/alpine-2-%s; exit 1; fi"
+      login_retries = 3
+    }
+    destination {
+	  image = "docker://localhost:5000/alpine-multiple-retry-2-%s"
+      login_retries = 3
+    }
+    insecure = true
+}
+
+resource "skopeo2_copy" "alpine_multiple_retry_3_%s" {
+    source {
+	  image = "docker://alpine"
+	  login_script = "if test -f /tmp/alpine-3s-%s; then exit 0; else touch /tmp/alpine-3s-%s; exit 1; fi"
+      login_retries = 3
+    }
+    destination {
+	  image = "docker://localhost:5000/alpine-multiple-retry-3-%s"
+	  login_script = "if test -f /tmp/alpine-3d-%s; then exit 0; else touch /tmp/alpine-3d-%s; exit 1; fi"
+      login_retries = 3
+    }
+    insecure = true
+}
+
+resource "skopeo2_copy" "alpine_multiple_retry_4_%s" {
+    source {
+	  image = "docker://alpine"
+      login_retries = 3
+    }
+    destination {
+	  image = "docker://localhost:5000/alpine-multiple-retry-4-%s"
+      login_retries = 3
+    }
+    insecure = true
+}
+`, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name, name)
 }
 
 func testAccCopyResource_addTag(name string) string {
-	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_%s" {
+	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_add_tag_%s" {
     source {
 	  image = "docker://alpine"
     }
     destination {
-	  image = "docker://localhost:5000/alpine"
+	  image = "docker://localhost:5000/alpine-add-tag-%s"
     }
 	additional_tags   = ["alpine:fine"]
 	keep_image        = true
     insecure          = true
-}`, name)
+}`, name, name)
 }
