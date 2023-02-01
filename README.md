@@ -1,5 +1,8 @@
 # Terraform Provider skopeo2 (Terraform Plugin SDK)
 
+Reference to earlier provider https://registry.terraform.io/providers/abergmeier/skopeo written by
+abergmeier that this project is based on.
+
 _This template repository is built on the [Terraform Plugin SDK](https://github.com/hashicorp/terraform-plugin-sdk). The template repository built on the [Terraform Plugin Framework](https://github.com/hashicorp/terraform-plugin-framework) can be found at [terraform-provider-skopeo2-framework](https://github.com/bsquare-corp/terraform-provider-skopeo2-framework). See [Which SDK Should I Use?](https://www.terraform.io/docs/plugin/which-sdk.html) in the Terraform documentation for additional information._
 
 This repository is a *template* for a [Terraform](https://www.terraform.io) provider. It is intended as a starting point for creating Terraform providers, containing:
