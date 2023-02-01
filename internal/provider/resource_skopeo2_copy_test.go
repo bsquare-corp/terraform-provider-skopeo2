@@ -1,15 +1,18 @@
 package provider
 
 import (
+	"context"
 	"fmt"
+	skopeoPkg "github.com/bsquare-corp/terraform-provider-skopeo2/pkg/skopeo"
+	"github.com/containers/common/pkg/retry"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"regexp"
 	"testing"
-
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 )
 
 func serveReverseProxy(target string, res http.ResponseWriter, req *http.Request) {
@@ -31,6 +34,54 @@ func serveReverseProxy(target string, res http.ResponseWriter, req *http.Request
 
 func handleRequestAndRedirect(res http.ResponseWriter, req *http.Request) {
 	serveReverseProxy(req.RequestURI, res, req)
+}
+
+func TestAccResourceSkopeo2_deletedDestination(t *testing.T) {
+	// This test is not to be run in parallel as the state achieved by the first test step is used in the second
+
+	rName := acctest.RandStringFromCharSet(10, acctest.CharSetAlphaNum)
+
+	resource.UnitTest(t, resource.TestCase{
+		PreCheck:          func() { testAccPreCheck(t) },
+		ProviderFactories: providerFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCopyResource(rName),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_copy_resource_%s", rName),
+						"docker_digest"),
+				),
+			},
+			{
+				PreConfig: deleteDest(rName),
+				Config:    testAccCopyResource(rName),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_copy_resource_%s", rName),
+						"docker_digest"),
+				),
+			},
+		},
+	})
+}
+
+func deleteDest(name string) func() {
+	return func() {
+		opts := &skopeoPkg.DeleteOptions{
+			Image: &skopeoPkg.ImageOptions{
+				DockerImageOptions: skopeoPkg.DockerImageOptions{
+					Global:       &skopeoPkg.GlobalOptions{},
+					Shared:       &skopeoPkg.SharedImageOptions{},
+					AuthFilePath: os.Getenv("REGISTRY_AUTH_FILE"),
+					Insecure:     true,
+				},
+			},
+			RetryOpts: &retry.RetryOptions{},
+		}
+
+		_ = skopeoPkg.Delete(context.Background(),
+			fmt.Sprintf("docker://localhost:5000/alpine-copy-resource-%s", name),
+			opts)
+	}
 }
 
 func TestAccResourceSkopeo2(t *testing.T) {
