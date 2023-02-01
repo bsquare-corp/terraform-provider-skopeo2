@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	skopeoPkg "github.com/bsquare-corp/terraform-provider-skopeo/pkg/skopeo"
+	skopeoPkg "github.com/bsquare-corp/terraform-provider-skopeo2/pkg/skopeo"
 )
 
 func TestInspect(t *testing.T) {
