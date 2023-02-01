@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -29,6 +30,7 @@ var (
 
 Supported transports:
 %s`, "`"+strings.Join(transports.ListNames(), "`, `")+"`")
+	loginInProgress sync.Mutex
 )
 
 func resourceSkopeo2Copy() *schema.Resource {
@@ -257,19 +259,52 @@ func getSomewhereParams(d *schema.ResourceData, key string) (*somewhere, error) 
 	return &params, nil
 }
 
-func withEndpointLogin(ctx context.Context, sw *somewhere, op func() (any, error)) (any, error) {
+func withEndpointLogin(ctx context.Context, sw *somewhere, locked bool, op func(locked bool) (any, error)) (any,
+	error) {
 
 	//Try the operation without logging in first, as the credentials may already be in place
-	result, err := op()
+	result, err := op(locked)
 	if err == nil {
 		return result, nil
 	}
 
-	if sw.loginRetriesRemaining <= 0 {
-		return result, err
+	sw.loginRetriesRemaining--
+
+	//Return error without attempting login if no login command is provided
+	if sw.loginCommand == "true" {
+		return nil, err
 	}
 
-	tflog.Trace(ctx, "Logging in for "+sw.image)
+	if !locked {
+		//We will get the lock if no other login is happening
+		if loginInProgress.TryLock() {
+			defer loginInProgress.Unlock()
+		} else {
+			//Block until the other login has completed
+			loginInProgress.Lock()
+			defer loginInProgress.Unlock()
+
+			//Try the operation again now that some other login has completed
+			result, err = op(true)
+			if err == nil {
+				return result, nil
+			}
+		}
+	}
+
+	//Didn't succeed so login
+	err = doLogin(ctx, sw)
+	if err != nil {
+		return nil, err
+	}
+
+	//Try the operation a final time now that the login has completed
+	return op(true)
+}
+
+func doLogin(ctx context.Context, sw *somewhere) error {
+
+	tflog.Info(ctx, "Login", map[string]any{"image": sw.image})
 
 	shell := sw.loginInterpreter[0]
 	flags := append(sw.loginInterpreter[1:], sw.loginCommand)
@@ -285,34 +320,32 @@ func withEndpointLogin(ctx context.Context, sw *somewhere, op func() (any, error
 	defer cmd.Stderr.(*providerlog.ProviderLogWriter).Close()
 	cmd.Dir = sw.workingDirectory
 
-	err = cmd.Start()
+	err := cmd.Start()
 	if err != nil {
-		return nil, err
+		tflog.Info(ctx, "Login fail", map[string]any{"image": sw.image, "err": err})
+		return err
 	}
 
 	err = cmd.Wait()
 	if err != nil {
-		sw.loginRetriesRemaining--
-		return nil, err
+		tflog.Info(ctx, "Login fail", map[string]any{"image": sw.image, "err": err})
+		if _, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("Login script failed for image %s: %s", sw.image, err.Error())
+		}
+		return err
 	}
 
-	result, err = op()
-	if err != nil {
-		sw.loginRetriesRemaining--
-	}
-
-	return result, err
+	return nil
 }
 
 func resourceSkopeo2CopyCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
 
-	tflog.Trace(ctx, "created a resource")
+	tflog.Debug(ctx, "Creating a resource")
 
 	src, err := getSomewhereParams(d, "source")
 	if err != nil {
 		return diag.FromErr(err)
 	}
-	tflog.Trace(ctx, "source inter "+src.loginInterpreter[0])
 
 	dst, err := getSomewhereParams(d, "destination")
 	if err != nil {
@@ -327,10 +360,12 @@ func resourceSkopeo2CopyCreate(ctx context.Context, d *schema.ResourceData, meta
 	src.loginRetriesRemaining = src.loginRetries + 1
 	dst.loginRetriesRemaining = dst.loginRetries + 1
 	for {
-		result, err := withEndpointLogin(ctx, src, func() (any, error) {
-			return withEndpointLogin(ctx, dst, func() (any, error) {
+		result, err := withEndpointLogin(ctx, src, false, func(locked bool) (any, error) {
+			return withEndpointLogin(ctx, dst, locked, func(_ bool) (any, error) {
+				tflog.Debug(ctx, "Copying", map[string]any{"src-image": src.image, "image": dst.image})
 				result, err := skopeo.Copy(ctx, src.image, dst.image, newCopyOptions(d, reportWriter))
 				if err != nil {
+					tflog.Info(ctx, "Copy failed", map[string]any{"src-image": src.image, "image": dst.image, "err": err})
 					return nil, err
 				}
 
@@ -340,7 +375,9 @@ func resourceSkopeo2CopyCreate(ctx context.Context, d *schema.ResourceData, meta
 
 		if err == nil {
 			d.SetId(dst.image)
-			return diag.FromErr(d.Set("docker_digest", result.(*skopeo.CopyResult).Digest))
+			digest := result.(*skopeo.CopyResult).Digest
+			tflog.Info(ctx, "Copied", map[string]any{"src-image": src.image, "image": dst.image, "digest": digest})
+			return diag.FromErr(d.Set("docker_digest", digest))
 		}
 
 		if src.loginRetriesRemaining <= 0 || dst.loginRetriesRemaining <= 0 {
@@ -358,13 +395,24 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 	dst.loginRetriesRemaining = dst.loginRetries + 1
 
 	for {
-		result, err := withEndpointLogin(ctx, dst, func() (any, error) {
+		result, err := withEndpointLogin(ctx, dst, false, func(_ bool) (any, error) {
+			tflog.Debug(ctx, "Inspecting", map[string]any{"image": dst.image})
 			result, err := skopeo.Inspect(ctx, dst.image, newInspectOptions(d))
 			if err != nil {
-				if errors.Is(err, storage.ErrNoSuchImage) || strings.HasSuffix(err.Error(), ": manifest unknown") {
+				tflog.Info(ctx, "Inspection failed", map[string]any{"image": dst.image, "err": err.Error()})
+				//The underlying storage code does not reveal the 404 response code on a missing image.
+				//The only indication that an image is missing is the presence of "manifest unknown" in the error
+				//reported. This comes from the body of the 404 response and is therefore subject to the whim of the
+				//registry implementation.
+				//Azure ACR for example reports:
+				//"manifest unknown: manifest tagged by "X.Y.Z" is not found"
+				//where as AWS ECR reports:
+				//"manifest unknown"
+				//This code is fragile but changes to the underlying library would be needed to improve on it.
+				if errors.Is(err, storage.ErrNoSuchImage) || strings.Contains(err.Error(),
+					"manifest unknown") {
 					return nil, nil
 				}
-
 				return nil, err
 			}
 
@@ -376,9 +424,12 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 				d.SetId("")
 				return nil
 			}
-			return diag.FromErr(d.Set("docker_digest", result.(*skopeo.InspectOutput).Digest))
+			digest := result.(*skopeo.InspectOutput).Digest
+			tflog.Info(ctx, "Inspection", map[string]any{"image": dst.image, "digest": digest})
+			return diag.FromErr(d.Set("docker_digest", digest))
 		}
 
+		tflog.Info(ctx, "Retries remaining", map[string]any{"count": dst.loginRetriesRemaining})
 		if dst.loginRetriesRemaining <= 0 {
 			return diag.FromErr(err)
 		}
@@ -409,14 +460,18 @@ func resourceSkopeo2CopyDelete(ctx context.Context, d *schema.ResourceData, meta
 	}
 
 	for {
-		_, err := withEndpointLogin(ctx, dst, func() (any, error) {
+		_, err := withEndpointLogin(ctx, dst, false, func(_ bool) (any, error) {
+			tflog.Debug(ctx, "Deleting", map[string]any{"image": dst.image})
 			err := skopeoPkg.Delete(ctx, dst.image, newDeleteOptions(d))
 			if err != nil {
+				tflog.Info(ctx, "Delete fail", map[string]any{"image": dst.image, "err": err})
 				return nil, err
 			}
 			return nil, nil
 		})
-		return diag.FromErr(err)
+		if dst.loginRetriesRemaining <= 0 {
+			return diag.FromErr(err)
+		}
 	}
 }
 
