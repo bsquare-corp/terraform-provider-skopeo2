@@ -400,7 +400,17 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 			result, err := skopeo.Inspect(ctx, dst.image, newInspectOptions(d))
 			if err != nil {
 				tflog.Info(ctx, "Inspection failed", map[string]any{"image": dst.image, "err": err.Error()})
-				if errors.Is(err, storage.ErrNoSuchImage) || strings.HasSuffix(err.Error(), ": manifest unknown") {
+				//The underlying storage code does not reveal the 404 response code on a missing image.
+				//The only indication that an image is missing is the presence of "manifest unknown" in the error
+				//reported. This comes from the body of the 404 response and is therefore subject to the whim of the
+				//registry implementation.
+				//Azure ACR for example reports:
+				//"manifest unknown: manifest tagged by "X.Y.Z" is not found"
+				//where as AWS ECR reports:
+				//"manifest unknown"
+				//This code is fragile but changes to the underlying library would be needed to improve on it.
+				if errors.Is(err, storage.ErrNoSuchImage) || strings.Contains(err.Error(),
+					"manifest unknown") {
 					return nil, nil
 				}
 				return nil, err
