@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/containers/common v0.50.1
 	github.com/containers/image/v5 v5.23.1
-	github.com/containers/ocicrypt v1.1.6
+	github.com/containers/ocicrypt v1.1.7
 	github.com/containers/storage v1.44.1-0.20221215163359-b0949d90efad
 	github.com/docker/docker v20.10.22+incompatible
 	github.com/docker/go-connections v0.4.0
