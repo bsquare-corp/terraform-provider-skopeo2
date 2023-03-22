@@ -3,11 +3,11 @@ module github.com/bsquare-corp/terraform-provider-skopeo2
 go 1.18
 
 require (
-	github.com/containers/common v0.50.1
-	github.com/containers/image/v5 v5.23.1
-	github.com/containers/ocicrypt v1.1.6
-	github.com/containers/storage v1.44.1-0.20221215163359-b0949d90efad
-	github.com/docker/docker v20.10.22+incompatible
+	github.com/containers/common v0.51.1
+	github.com/containers/image/v5 v5.24.0
+	github.com/containers/ocicrypt v1.1.7
+	github.com/containers/storage v1.45.3
+	github.com/docker/docker v20.10.23+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/goombaio/namegenerator v0.0.0-20181006234301-989e774b106e
 	github.com/hashicorp/go-cty v1.4.1-0.20200414143053-d3edf31b6320
@@ -37,7 +37,7 @@ require (
 	github.com/bgentry/speakeasy v0.1.0 // indirect
 	github.com/containerd/cgroups v1.0.4 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.13.0 // indirect
-	github.com/containers/libtrust v0.0.0-20200511145503-9c3a6c22cd9a // indirect
+	github.com/containers/libtrust v0.0.0-20230121012942-c1716e8a8d01 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/distribution v2.8.1+incompatible // indirect
@@ -73,7 +73,7 @@ require (
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.15.14 // indirect
+	github.com/klauspost/compress v1.15.15 // indirect
 	github.com/klauspost/pgzip v1.2.6-0.20220930104621-17e8dac29df8 // indirect
 	github.com/letsencrypt/boulder v0.0.0-20230105221423-8d43397d1a9d // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
@@ -93,7 +93,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/opencontainers/runc v1.1.4 // indirect
-	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417 // indirect
+	github.com/opencontainers/runtime-spec v1.0.3-0.20220825212826-86290f6a00fb // indirect
 	github.com/opencontainers/selinux v1.10.2 // indirect
 	github.com/ostreedev/ostree-go v0.0.0-20210805093236-719684c64e4f // indirect
 	github.com/posener/complete v1.2.3 // indirect
@@ -101,7 +101,7 @@ require (
 	github.com/rivo/uniseg v0.4.3 // indirect
 	github.com/russross/blackfriday v1.6.0 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
-	github.com/sigstore/sigstore v1.5.0 // indirect
+	github.com/sigstore/sigstore v1.5.1 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/stefanberger/go-pkcs11uri v0.0.0-20201008174630-78d3cae3a980 // indirect
 	github.com/sylabs/sif/v2 v2.9.0 // indirect
