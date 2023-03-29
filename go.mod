@@ -7,7 +7,7 @@ require (
 	github.com/containers/image/v5 v5.23.1
 	github.com/containers/ocicrypt v1.1.6
 	github.com/containers/storage v1.44.1-0.20221215163359-b0949d90efad
-	github.com/docker/docker v20.10.22+incompatible
+	github.com/docker/docker v23.0.2+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/goombaio/namegenerator v0.0.0-20181006234301-989e774b106e
 	github.com/hashicorp/go-cty v1.4.1-0.20200414143053-d3edf31b6320
