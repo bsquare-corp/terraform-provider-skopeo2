@@ -52,6 +52,7 @@ resource "skopeo2_copy" "example" {
 ### Optional
 
 - `additional_tags` (List of String) additional tags (supports docker-archive)
+- `copy_all_images` (Boolean) indicates that the caller expects to copy all images from a multiple image manifest, otherwise only one image matching the system arch/platform is copied
 - `insecure` (Boolean) allow access to non-TLS insecure repositories.
 - `keep_image` (Boolean) keep image when Resource gets deleted. This currently needs to be set to `true` when working with GitHub Container registry.
 - `preserve_digests` (Boolean) fail if we cannot preserve the source digests in the destination image.
