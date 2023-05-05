@@ -101,6 +101,14 @@ func TestAccResourceSkopeo2(t *testing.T) {
 				),
 			},
 			{
+				Config: testAccCopyResourceMultiImage(rName),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_copy_resource_multi_image_%s",
+						rName),
+						"docker_digest"),
+				),
+			},
+			{
 				Config:      testAccCopyResourceFail(rName),
 				ExpectError: expectErrorRegExpr("requested access to the resource is denied"),
 			},
@@ -168,6 +176,19 @@ func testAccCopyResource(name string) string {
 	  image = "docker://localhost:5000/alpine-copy-resource-%s"
     }
     insecure = true
+}`, name, name)
+}
+
+func testAccCopyResourceMultiImage(name string) string {
+	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_copy_resource_multi_image_%s" {
+    source {
+	  image = "docker://alpine"
+    }
+    destination {
+	  image = "docker://localhost:5000/alpine-copy-resource-multi-image-%s"
+    }
+    insecure = true
+    copy_all_images = true
 }`, name, name)
 }
 

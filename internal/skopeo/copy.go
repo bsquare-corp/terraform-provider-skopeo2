@@ -23,11 +23,11 @@ type CopyOptions struct {
 	RetryOpts         *retry.RetryOptions
 	AdditionalTags    []string // For docker-archive: destinations, in addition to the name:tag specified as destination, also add these
 	PreserveDigests   bool     // Fail if we cannot preserve the source digests in the destination image
+	All               bool     // Copy all of the images if the source is a list
 	removeSignatures  bool     // Do not copy signatures from the source image
 	signByFingerprint string   // Sign the image using a GPG key with the specified fingerprint
 	format            string
 	quiet             bool     // Suppress output information when copying images
-	all               bool     // Copy all of the images if the source is a list
 	encryptLayer      []int    // The list of layers to encrypt
 	encryptionKeys    []string // Keys needed to encrypt the image
 	decryptionKeys    []string // Keys needed to decrypt the image
@@ -90,7 +90,7 @@ func Copy(ctx context.Context, sourceImageName, destinationImageName string, opt
 	}
 
 	imageListSelection := copy.CopySystemImage
-	if opts.all {
+	if opts.All {
 		imageListSelection = copy.CopyAllImages
 	}
 

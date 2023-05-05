@@ -184,6 +184,13 @@ func resourceSkopeo2Copy() *schema.Resource {
 				Default:     false,
 				Description: "allow access to non-TLS insecure repositories.",
 			},
+			"copy_all_images": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     false,
+				Description: "indicates that the caller expects to copy all images from a multiple image manifest, " +
+					"otherwise only one image matching the system arch/platform is copied",
+			},
 			"docker_digest": {
 				Type:        schema.TypeString,
 				Computed:    true,
@@ -499,6 +506,7 @@ func newCopyOptions(d *schema.ResourceData, reportWriter *providerlog.ProviderLo
 		RetryOpts:       newRetryOptions(d),
 		AdditionalTags:  additionalTags,
 		PreserveDigests: preserveDigests,
+		All:             d.Get("copy_all_images").(bool),
 	}
 	return opts
 }
