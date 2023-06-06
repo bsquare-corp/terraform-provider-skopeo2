@@ -79,7 +79,7 @@ func deleteDest(name string) func() {
 		}
 
 		_ = skopeoPkg.Delete(context.Background(),
-			fmt.Sprintf("docker://localhost:5000/alpine-copy-resource-%s", name),
+			fmt.Sprintf("docker://localhost:9016/alpine-copy-resource-%s", name),
 			opts)
 	}
 }
@@ -173,7 +173,7 @@ func testAccCopyResource(name string) string {
 	  image = "docker://alpine"
     }
     destination {
-	  image = "docker://localhost:5000/alpine-copy-resource-%s"
+	  image = "docker://localhost:9016/alpine-copy-resource-%s"
     }
     insecure = true
 }`, name, name)
@@ -185,7 +185,7 @@ func testAccCopyResourceMultiImage(name string) string {
 	  image = "docker://alpine"
     }
     destination {
-	  image = "docker://localhost:5000/alpine-copy-resource-multi-image-%s"
+	  image = "docker://localhost:9016/alpine-copy-resource-multi-image-%s"
     }
     insecure = true
     copy_all_images = true
@@ -199,7 +199,7 @@ func testAccCopyResourceFail(name string) string {
       login_retries = 3
     }
     destination {
-	  image = "docker://localhost:5000/alpine-resource-fail-%s"
+	  image = "docker://localhost:9016/alpine-resource-fail-%s"
       login_retries = 3
     }
     insecure = true
@@ -212,7 +212,7 @@ func testAccCopyBadResourceFail(name string) string {
 	  image = "cocker://alpine-bad"
     }
     destination {
-	  image = "docker://localhost:5000/alpine-bad-resource-%s"
+	  image = "docker://localhost:9016/alpine-bad-resource-%s"
     }
     insecure = true
 }`, name, name)
@@ -225,7 +225,7 @@ func testAccCopyResourceLoginFail(name string) string {
       login_script = "false"
     }
     destination {
-	  image = "docker://localhost:5000/alpine-login-fail-%s"
+	  image = "docker://localhost:9016/alpine-login-fail-%s"
       login_script = "false"
     }
     insecure = true
@@ -240,7 +240,7 @@ resource "skopeo2_copy" "alpine_login_source_%s" {
       login_script = "aws --profile bsquare-jenkins2 ecr get-login-password --region us-west-1 | docker login --username AWS --password-stdin 753989949864.dkr.ecr.us-west-1.amazonaws.com"
     }
     destination {
-	  image = "docker://localhost:5000/alpine-login-source-%s"
+	  image = "docker://localhost:9016/alpine-login-source-%s"
     }
     insecure = true
 }
@@ -252,7 +252,7 @@ resource "skopeo2_copy" "alpine_login_source_2_%s" {
       login_retries = 3
     }
     destination {
-	  image = "docker://localhost:5000/alpine-login-source-2-%s"
+	  image = "docker://localhost:9016/alpine-login-source-2-%s"
       login_retries = 3
     }
     insecure = true
@@ -266,7 +266,7 @@ func testAccCopyResource_withRetry(name string) string {
 	  image = "docker://alpine"
     }
     destination {
-	  image = "docker://localhost:5000/alpine-with-retry-%s"
+	  image = "docker://localhost:9016/alpine-with-retry-%s"
     }
     retries = 2
     retry_delay = 30
@@ -282,7 +282,7 @@ resource "skopeo2_copy" "alpine_multiple_retry_%s" {
       login_retries = 3
     }
     destination {
-	  image = "docker://localhost:5000/alpine-multiple-retry-%s"
+	  image = "docker://localhost:9016/alpine-multiple-retry-%s"
 	  login_script = "if test -f /tmp/alpine-%s; then exit 0; else touch /tmp/alpine-%s; exit 1; fi"
       login_retries = 3
     }
@@ -296,7 +296,7 @@ resource "skopeo2_copy" "alpine_multiple_retry_2_%s" {
       login_retries = 3
     }
     destination {
-	  image = "docker://localhost:5000/alpine-multiple-retry-2-%s"
+	  image = "docker://localhost:9016/alpine-multiple-retry-2-%s"
       login_retries = 3
     }
     insecure = true
@@ -309,7 +309,7 @@ resource "skopeo2_copy" "alpine_multiple_retry_3_%s" {
       login_retries = 3
     }
     destination {
-	  image = "docker://localhost:5000/alpine-multiple-retry-3-%s"
+	  image = "docker://localhost:9016/alpine-multiple-retry-3-%s"
 	  login_script = "if test -f /tmp/alpine-3d-%s; then exit 0; else touch /tmp/alpine-3d-%s; exit 1; fi"
       login_retries = 3
     }
@@ -322,7 +322,7 @@ resource "skopeo2_copy" "alpine_multiple_retry_4_%s" {
       login_retries = 3
     }
     destination {
-	  image = "docker://localhost:5000/alpine-multiple-retry-4-%s"
+	  image = "docker://localhost:9016/alpine-multiple-retry-4-%s"
       login_retries = 3
     }
     insecure = true
@@ -336,7 +336,7 @@ func testAccCopyResource_addTag(name string) string {
 	  image = "docker://alpine"
     }
     destination {
-	  image = "docker://localhost:5000/alpine-add-tag-%s"
+	  image = "docker://localhost:9016/alpine-add-tag-%s"
     }
 	additional_tags   = ["alpine:fine"]
 	keep_image        = true

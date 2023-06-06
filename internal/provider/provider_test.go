@@ -77,8 +77,8 @@ func StartLocalRegistry() (string, error) {
 	}
 
 	hostBinding := nat.PortBinding{
-		HostIP:   "0.0.0.0",
-		HostPort: "5000",
+		HostIP:   "127.0.0.1",
+		HostPort: "9016",
 	}
 	containerPort, err := nat.NewPort("tcp", "5000")
 	if err != nil {
