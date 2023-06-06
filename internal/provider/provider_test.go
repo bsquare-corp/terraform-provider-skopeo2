@@ -120,7 +120,7 @@ func StopContainer(containerID string) error {
 		log.Fatalf("Unable to create docker client\n")
 	}
 
-	err = cli.ContainerStop(context.Background(), containerID, nil)
+	err = cli.ContainerStop(context.Background(), containerID, container.StopOptions{})
 	if err != nil {
 		log.Println("Stop container failed")
 		return err
