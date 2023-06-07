@@ -37,22 +37,30 @@ func testAccPreCheck(t *testing.T) {
 	// about the appropriate environment variables being set are common to see in a pre-check
 	// function.
 	StartLocalRegistry()
+	ListContainer()
+}
+
+func newDockerCli(ctx context.Context) *client.Client {
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		log.Fatalf("Unable to get new docker client: %v", err)
+	}
+	cli.NegotiateAPIVersion(ctx)
+	return cli
 }
 
 // ListContainer lists all the containers running on host machine
 func ListContainer() error {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatalf("Unable to get new docker client: %v", err)
-	}
+	cli := newDockerCli(context.Background())
+
 	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
 		log.Printf("Unable to list containers: %v", err)
 		return err
 	}
 	if len(containers) > 0 {
-		for _, container := range containers {
-			log.Printf("Container ID: %s", container.ID)
+		for _, c := range containers {
+			log.Printf("Container ID: %s Image: %s", c.ID, c.Image)
 		}
 	} else {
 		log.Println("There are no containers running")
@@ -61,10 +69,7 @@ func ListContainer() error {
 }
 
 func StartLocalRegistry() (string, error) {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatalf("Unable to create docker client\n")
-	}
+	cli := newDockerCli(context.Background())
 
 	resp, err := cli.ImagePull(context.Background(), "registry:2", types.ImagePullOptions{})
 	if err != nil {
@@ -77,8 +82,8 @@ func StartLocalRegistry() (string, error) {
 	}
 
 	hostBinding := nat.PortBinding{
-		HostIP:   "0.0.0.0",
-		HostPort: "5000",
+		HostIP:   "127.0.0.1",
+		HostPort: "9016",
 	}
 	containerPort, err := nat.NewPort("tcp", "5000")
 	if err != nil {
@@ -115,12 +120,9 @@ func StartLocalRegistry() (string, error) {
 
 // StopContainer stops the container of given ID
 func StopContainer(containerID string) error {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatalf("Unable to create docker client\n")
-	}
+	cli := newDockerCli(context.Background())
 
-	err = cli.ContainerStop(context.Background(), containerID, nil)
+	err := cli.ContainerStop(context.Background(), containerID, container.StopOptions{})
 	if err != nil {
 		log.Println("Stop container failed")
 		return err
@@ -130,10 +132,8 @@ func StopContainer(containerID string) error {
 
 // PruneContainers clears all containers that are not running
 func PruneContainers() error {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatalf("Unable to create docker client\n")
-	}
+	cli := newDockerCli(context.Background())
+
 	report, err := cli.ContainersPrune(context.Background(), filters.Args{})
 	if err != nil {
 		log.Println("Prune container failed")

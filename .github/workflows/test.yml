@@ -82,6 +82,8 @@ jobs:
           - '1.0.*'
           - '1.1.*'
           - '1.2.*'
+          - '1.3.*'
+          - '1.4.*'
     steps:
 
     - name: Check out code into the Go module directory
@@ -117,6 +119,7 @@ jobs:
         # optionally use data from your repository secrets using the
         # following syntax:
         # SOME_VAR: ${{ secrets.SOME_VAR }}
+        TF_LOG: "debug"
 
       run: |
         go test -v -cover ./internal/provider/
