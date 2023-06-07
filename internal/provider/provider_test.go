@@ -37,6 +37,7 @@ func testAccPreCheck(t *testing.T) {
 	// about the appropriate environment variables being set are common to see in a pre-check
 	// function.
 	StartLocalRegistry()
+	ListContainer()
 }
 
 // ListContainer lists all the containers running on host machine
@@ -51,8 +52,8 @@ func ListContainer() error {
 		return err
 	}
 	if len(containers) > 0 {
-		for _, container := range containers {
-			log.Printf("Container ID: %s", container.ID)
+		for _, c := range containers {
+			log.Printf("Container ID: %s Image: %s", c.ID, c.Image)
 		}
 	} else {
 		log.Println("There are no containers running")
