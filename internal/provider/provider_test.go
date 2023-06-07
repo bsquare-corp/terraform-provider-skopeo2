@@ -40,12 +40,19 @@ func testAccPreCheck(t *testing.T) {
 	ListContainer()
 }
 
-// ListContainer lists all the containers running on host machine
-func ListContainer() error {
-	cli, err := client.NewEnvClient()
+func newDockerCli(ctx context.Context) *client.Client {
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		log.Fatalf("Unable to get new docker client: %v", err)
 	}
+	cli.NegotiateAPIVersion(ctx)
+	return cli
+}
+
+// ListContainer lists all the containers running on host machine
+func ListContainer() error {
+	cli := newDockerCli(context.Background())
+
 	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
 		log.Printf("Unable to list containers: %v", err)
@@ -62,10 +69,7 @@ func ListContainer() error {
 }
 
 func StartLocalRegistry() (string, error) {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatalf("Unable to create docker client\n")
-	}
+	cli := newDockerCli(context.Background())
 
 	resp, err := cli.ImagePull(context.Background(), "registry:2", types.ImagePullOptions{})
 	if err != nil {
@@ -116,12 +120,9 @@ func StartLocalRegistry() (string, error) {
 
 // StopContainer stops the container of given ID
 func StopContainer(containerID string) error {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatalf("Unable to create docker client\n")
-	}
+	cli := newDockerCli(context.Background())
 
-	err = cli.ContainerStop(context.Background(), containerID, container.StopOptions{})
+	err := cli.ContainerStop(context.Background(), containerID, container.StopOptions{})
 	if err != nil {
 		log.Println("Stop container failed")
 		return err
@@ -131,10 +132,8 @@ func StopContainer(containerID string) error {
 
 // PruneContainers clears all containers that are not running
 func PruneContainers() error {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatalf("Unable to create docker client\n")
-	}
+	cli := newDockerCli(context.Background())
+
 	report, err := cli.ContainersPrune(context.Background(), filters.Args{})
 	if err != nil {
 		log.Println("Prune container failed")
