@@ -193,6 +193,7 @@ func resourceSkopeo2Copy() *schema.Resource {
 			},
 			"docker_digest": {
 				Type:        schema.TypeString,
+				Optional:    true,
 				Computed:    true,
 				Description: "digest string for the destination image.",
 			},
@@ -444,9 +445,6 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 }
 
 func resourceSkopeo2CopyUpdate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
-	if !d.HasChanges("additional_tags", "source_image") {
-		return nil
-	}
 	return resourceSkopeo2CopyCreate(ctx, d, meta)
 }
 

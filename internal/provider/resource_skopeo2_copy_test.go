@@ -149,6 +149,13 @@ func TestAccResourceSkopeo2(t *testing.T) {
 					),
 				),
 			},
+			{
+				Config: testAccCopyResourceWithDigest(rName),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestMatchResourceAttr(fmt.Sprintf("skopeo2_copy.alpine_copy_resource_digest_%s", rName),
+						"docker_digest", regexp.MustCompile(`^sha256`)),
+				),
+			},
 			/*
 				{ // TODO Login source can only be executed with an actual AWS account
 					Config: testAccCopyResource_loginSource(rName),
@@ -176,6 +183,26 @@ func testAccCopyResource(name string) string {
 	  image = "docker://127.0.0.1:9016/alpine-copy-resource-%s"
     }
     insecure = true
+}`, name, name)
+}
+
+func testAccCopyResourceWithDigest(name string) string {
+	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_copy_resource_digest_%s" {
+    source {
+	  image = "docker://alpine"
+    }
+    destination {
+	  image = "docker://127.0.0.1:9016/alpine-copy-resource-digest-%s"
+    }
+    insecure = true
+    docker_digest = "testvalue"
+    lifecycle {
+        ignore_changes = [
+          # For unit test only, because the teat fails due to the test value of docker_digest not matching the actual
+          # destination digest
+          docker_digest,
+      ]
+    }
 }`, name, name)
 }
 
