@@ -481,16 +481,16 @@ func resourceSkopeo2CopyDelete(ctx context.Context, d *schema.ResourceData, meta
 }
 
 func getStringList(d *schema.ResourceData, key string, def []string) []string {
-	at := d.Get("additional_tags")
+	at := d.Get(key)
 	if at == nil {
 		return def
 	}
 	atl := at.([]interface{})
-	additionalTags := make([]string, 0, len(atl))
+	stringList := make([]string, 0, len(atl))
 	for _, t := range atl {
-		additionalTags = append(additionalTags, t.(string))
+		stringList = append(stringList, t.(string))
 	}
-	return additionalTags
+	return stringList
 }
 
 func newCopyOptions(d *schema.ResourceData, reportWriter *providerlog.ProviderLogWriter) *skopeo.CopyOptions {
