@@ -46,8 +46,8 @@ resource "skopeo2_copy" "example" {
 
 ### Required
 
-- `destination` (Block List, Min: 1, Max: 1) (see [below for nested schema](#nestedblock--destination))
-- `source` (Block List, Min: 1, Max: 1) Copy an IMAGE-NAME from one location to another (see [below for nested schema](#nestedblock--source))
+- `destination` (Block List, Min: 1, Max: 1) Destination image location (see [below for nested schema](#nestedblock--destination))
+- `source` (Block List, Min: 1, Max: 1) Source image location (see [below for nested schema](#nestedblock--source))
 
 ### Optional
 
