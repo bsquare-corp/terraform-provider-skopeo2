@@ -33,6 +33,54 @@ Supported transports:
 	loginInProgress sync.Mutex
 )
 
+// somewhere can be the source or destination
+func somewhereResource(imageDescription string, imageValidator schema.SchemaValidateDiagFunc) *schema.Resource {
+	return &schema.Resource{
+		Schema: map[string]*schema.Schema{
+			"image": {
+				Type:             schema.TypeString,
+				Required:         true,
+				Description:      imageDescription,
+				ValidateDiagFunc: imageValidator,
+			},
+			"login_script": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "true",
+				Description: "Command to be executed by the login_script_interpreter to authenticate" +
+					" following skopeo operations",
+			},
+			"login_retries": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				Default:  "0",
+				Description: "Either if the login_script reports failure with non-exit code, " +
+					"or if following successful login the copy operation fails, " +
+					"retry this number of times.",
+			},
+			"login_environment": {
+				Type:     schema.TypeMap,
+				Optional: true,
+				Elem:     schema.TypeString,
+			},
+			"login_script_interpreter": {
+				Type:     schema.TypeList,
+				Optional: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Description: "The interpreter used to execute the script, defaults to" +
+					" [\"/bin/sh\", \"-c\"]",
+			},
+			"working_directory": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  ".",
+			},
+		},
+	}
+}
+
 func resourceSkopeo2Copy() *schema.Resource {
 	return &schema.Resource{
 		// This description is used by the documentation generator and the language server.
@@ -48,101 +96,16 @@ func resourceSkopeo2Copy() *schema.Resource {
 				Type:        schema.TypeList,
 				Required:    true,
 				MaxItems:    1,
-				Description: "Copy an IMAGE-NAME from one location to another",
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"image": {
-							Type:             schema.TypeString,
-							Required:         true,
-							Description:      imageDescriptionTemplate,
-							ValidateDiagFunc: validateSourceImage,
-						},
-						"login_script": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Default:  "true",
-							Description: "Command to be executed by the login_script_interpreter to authenticate" +
-								" following skopeo operations",
-						},
-						"login_retries": {
-							Type:     schema.TypeInt,
-							Optional: true,
-							Default:  "0",
-							Description: "Either if the login_script reports failure with non-exit code, " +
-								"or if following successful login the copy operation fails, " +
-								"retry this number of times.",
-						},
-						"login_environment": {
-							Type:     schema.TypeMap,
-							Optional: true,
-							Elem:     schema.TypeString,
-						},
-						"login_script_interpreter": {
-							Type:     schema.TypeList,
-							Optional: true,
-							Elem: &schema.Schema{
-								Type: schema.TypeString,
-							},
-							Description: "The interpreter used to execute the script, defaults to" +
-								" [\"/bin/sh\", \"-c\"]",
-						},
-						"working_directory": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Default:  ".",
-						},
-					},
-				},
+				Description: "Source image location",
+				Elem:        somewhereResource(imageDescriptionTemplate, validateSourceImage),
 			},
 			"destination": {
-				Type:     schema.TypeList,
-				Required: true,
-				MaxItems: 1,
-				ForceNew: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"image": {
-							Type:             schema.TypeString,
-							Required:         true,
-							Description:      imageDescriptionTemplate + ".\nWhen working with GitHub Container registry `keep_image` needs to be set to `true`.",
-							ValidateDiagFunc: validateDestinationImage,
-						},
-						"login_script": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Default:  "true",
-							Description: "Command to be executed by the login_script_interpreter to authenticate" +
-								" following skopeo operations",
-						},
-						"login_retries": {
-							Type:     schema.TypeInt,
-							Optional: true,
-							Default:  "0",
-							Description: "Either if the login_script reports failure with non-exit code, " +
-								"or if following successful login the copy operation fails, " +
-								"retry this number of times.",
-						},
-						"login_environment": {
-							Type:     schema.TypeMap,
-							Optional: true,
-							Elem:     schema.TypeString,
-						},
-						"login_script_interpreter": {
-							Type:     schema.TypeList,
-							Optional: true,
-							Elem: &schema.Schema{
-								Type: schema.TypeString,
-							},
-							Description: "The interpreter used to execute the script, defaults to" +
-								" [\"/bin/sh\", \"-c\"]",
-						},
-						"working_directory": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Default:  ".",
-						},
-					},
-				},
+				Type:        schema.TypeList,
+				Required:    true,
+				MaxItems:    1,
+				ForceNew:    true,
+				Description: "Destination image location",
+				Elem:        somewhereResource(imageDescriptionTemplate+".\nWhen working with GitHub Container registry `keep_image` needs to be set to `true`.", validateDestinationImage),
 			},
 			"retries": {
 				Type:     schema.TypeInt,
@@ -185,9 +148,9 @@ func resourceSkopeo2Copy() *schema.Resource {
 				Description: "allow access to non-TLS insecure repositories.",
 			},
 			"copy_all_images": {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     false,
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
 				Description: "indicates that the caller expects to copy all images from a multiple image manifest, " +
 					"otherwise only one image matching the system arch/platform is copied",
 			},
