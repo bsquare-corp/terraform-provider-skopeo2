@@ -34,7 +34,12 @@ Supported transports:
 )
 
 // somewhere can be the source or destination
-func somewhereResource(imageDescription string, imageValidator schema.SchemaValidateDiagFunc) *schema.Resource {
+func somewhereResource(parent string, imageDescription string, imageValidator schema.SchemaValidateDiagFunc) *schema.
+	Resource {
+	unPwConflicts := []string{parent + ".login_script", parent + ".login_environment",
+		parent + ".login_script_interpreter", parent + ".working_directory"}
+	scriptConflicts := []string{parent + ".login_password", parent + ".login_username"}
+
 	return &schema.Resource{
 		Schema: map[string]*schema.Schema{
 			"image": {
@@ -43,12 +48,28 @@ func somewhereResource(imageDescription string, imageValidator schema.SchemaVali
 				Description:      imageDescription,
 				ValidateDiagFunc: imageValidator,
 			},
+			"login_username": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				Description:   "Password for registry",
+				ConflictsWith: unPwConflicts,
+				RequiredWith:  []string{parent + ".login_password"},
+			},
+			"login_password": {
+				Type:          schema.TypeString,
+				Sensitive:     true,
+				Optional:      true,
+				Description:   "Password for registry",
+				ConflictsWith: unPwConflicts,
+				RequiredWith:  []string{parent + ".login_username"},
+			},
 			"login_script": {
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  "true",
 				Description: "Command to be executed by the login_script_interpreter to authenticate" +
 					" following skopeo operations",
+				ConflictsWith: scriptConflicts,
 			},
 			"login_retries": {
 				Type:     schema.TypeInt,
@@ -59,9 +80,11 @@ func somewhereResource(imageDescription string, imageValidator schema.SchemaVali
 					"retry this number of times.",
 			},
 			"login_environment": {
-				Type:     schema.TypeMap,
-				Optional: true,
-				Elem:     schema.TypeString,
+				Type:          schema.TypeMap,
+				Optional:      true,
+				Elem:          schema.TypeString,
+				ConflictsWith: scriptConflicts,
+				RequiredWith:  []string{parent + ".login_script"},
 			},
 			"login_script_interpreter": {
 				Type:     schema.TypeList,
@@ -71,11 +94,15 @@ func somewhereResource(imageDescription string, imageValidator schema.SchemaVali
 				},
 				Description: "The interpreter used to execute the script, defaults to" +
 					" [\"/bin/sh\", \"-c\"]",
+				ConflictsWith: scriptConflicts,
+				RequiredWith:  []string{parent + ".login_script"},
 			},
 			"working_directory": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Default:  ".",
+				Type:          schema.TypeString,
+				Optional:      true,
+				Default:       ".",
+				ConflictsWith: scriptConflicts,
+				RequiredWith:  []string{parent + ".login_script"},
 			},
 		},
 	}
@@ -97,7 +124,7 @@ func resourceSkopeo2Copy() *schema.Resource {
 				Required:    true,
 				MaxItems:    1,
 				Description: "Source image location",
-				Elem:        somewhereResource(imageDescriptionTemplate, validateSourceImage),
+				Elem:        somewhereResource("source", imageDescriptionTemplate, validateSourceImage),
 			},
 			"destination": {
 				Type:        schema.TypeList,
@@ -105,7 +132,7 @@ func resourceSkopeo2Copy() *schema.Resource {
 				MaxItems:    1,
 				ForceNew:    true,
 				Description: "Destination image location",
-				Elem:        somewhereResource(imageDescriptionTemplate+".\nWhen working with GitHub Container registry `keep_image` needs to be set to `true`.", validateDestinationImage),
+				Elem:        somewhereResource("destination", imageDescriptionTemplate+"\nWhen working with GitHub Container registry `keep_image` needs to be set to `true`.", validateDestinationImage),
 			},
 			"retries": {
 				Type:     schema.TypeInt,
@@ -195,6 +222,9 @@ type somewhere struct {
 	loginInterpreter      []string
 	loginRetriesRemaining int
 	workingDirectory      string
+	loginUsername         string
+	loginPassword         string
+	unPwLogin             bool
 }
 
 func getSomewhereParams(d *schema.ResourceData, key string) (*somewhere, error) {
@@ -226,6 +256,12 @@ func getSomewhereParams(d *schema.ResourceData, key string) (*somewhere, error) 
 		interpreter = []string{"/bin/sh", "-c"}
 	}
 	params.loginInterpreter = interpreter
+	username, unPwLogin := d.GetOk(key + ".login_username")
+	params.unPwLogin = unPwLogin
+	if unPwLogin {
+		params.loginUsername = username.(string)
+		params.loginPassword = d.Get(key + ".login_password").(string)
+	}
 
 	return &params, nil
 }
@@ -274,8 +310,24 @@ func withEndpointLogin(ctx context.Context, sw *somewhere, locked bool, op func(
 }
 
 func doLogin(ctx context.Context, sw *somewhere) error {
+	if sw.unPwLogin {
+		return doUnPwLogin(ctx, sw)
+	}
+	return doScriptLogin(ctx, sw)
+}
 
-	tflog.Info(ctx, "Login", map[string]any{"image": sw.image})
+func doUnPwLogin(ctx context.Context, sw *somewhere) error {
+
+	tflog.Info(ctx, "Login using user/pass", map[string]any{"image": sw.image})
+
+	// TODO
+
+	return nil
+}
+
+func doScriptLogin(ctx context.Context, sw *somewhere) error {
+
+	tflog.Info(ctx, "Login using script", map[string]any{"image": sw.image})
 
 	shell := sw.loginInterpreter[0]
 	flags := append(sw.loginInterpreter[1:], sw.loginCommand)
