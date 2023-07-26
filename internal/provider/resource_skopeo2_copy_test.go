@@ -156,14 +156,30 @@ func TestAccResourceSkopeo2(t *testing.T) {
 						"docker_digest", regexp.MustCompile(`^sha256`)),
 				),
 			},
+
 			/*
 				{ // TODO Login source can only be executed with an actual AWS account
-					Config: testAccCopyResource_loginSource(rName),
+					Config: testAccCopyResource_loginSourceUnPwScript(rName),
 					Check: resource.ComposeTestCheckFunc(
 						resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_login_source_%s", rName),
 							"docker_digest"),
 					),
 				},
+
+					{ // TODO Login source can only be executed with an actual AWS account
+						Config: testAccCopyResource_loginSource(rName),
+						Check: resource.ComposeTestCheckFunc(
+							resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_login_source_%s", rName),
+								"docker_digest"),
+						),
+					},
+					{
+						Config: testAccCopyResource_loginSourceRetry(rName),
+						Check: resource.ComposeTestCheckFunc(
+							resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_login_source_retry_%s", rName),
+								"docker_digest"),
+						),
+					},
 			*/
 		},
 	})
@@ -285,6 +301,47 @@ resource "skopeo2_copy" "alpine_login_source_2_%s" {
     insecure = true
 }
 `, name, name, name, name)
+}
+
+func testAccCopyResource_loginSourceRetry(name string) string {
+	return fmt.Sprintf(`
+resource "skopeo2_copy" "alpine_login_source_retry_%s" {
+    source {
+	  image         = "docker://753989949864.dkr.ecr.us-west-2.amazonaws.com/ecr-public/docker/library/alpine"
+      login_script  = <<-EOT
+if test -f /tmp/tf-%s; then
+	aws --profile bsquare-jenkins2 ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 753989949864.dkr.ecr.us-west-2.amazonaws.com
+else
+	touch /tmp/tf-%s
+fi
+EOT
+      login_retries = 3
+    }
+    destination {
+	  image = "docker://127.0.0.1:9016/alpine-login-source-retry-%s"
+      login_retries = 3
+    }
+    insecure = true
+}
+`, name, name, name, name)
+}
+
+func testAccCopyResource_loginSourceUnPwScript(name string) string {
+	return fmt.Sprintf(`
+resource "skopeo2_copy" "alpine_login_source_%s" {
+    source {
+	  image         = "docker://753989949864.dkr.ecr.us-west-1.amazonaws.com/ecr-public/docker/library/alpine"
+      login_username = "AWS"
+      login_password_script = "aws --profile bsquare-jenkins2 ecr get-login-password --region us-west-1"
+      login_retries = 3
+    }
+    destination {
+	  image = "docker://127.0.0.1:9016/alpine-login-unpw-script-source-%s"
+      login_retries = 3
+    }
+    insecure = true
+}
+`, name, name)
 }
 
 func testAccCopyResource_withRetry(name string) string {
