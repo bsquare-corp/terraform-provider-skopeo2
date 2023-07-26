@@ -36,9 +36,8 @@ Supported transports:
 // somewhere can be the source or destination
 func somewhereResource(parent string, imageDescription string, imageValidator schema.SchemaValidateDiagFunc) *schema.
 	Resource {
-	unPwConflicts := []string{parent + ".login_script", parent + ".login_environment",
-		parent + ".login_script_interpreter", parent + ".working_directory"}
-	scriptConflicts := []string{parent + ".login_password", parent + ".login_username"}
+	unPwConflicts := []string{parent + ".0.login_script"}
+	scriptConflicts := []string{parent + ".0.login_password_script", parent + ".0.login_username"}
 
 	return &schema.Resource{
 		Schema: map[string]*schema.Schema{
@@ -53,15 +52,15 @@ func somewhereResource(parent string, imageDescription string, imageValidator sc
 				Optional:      true,
 				Description:   "Password for registry",
 				ConflictsWith: unPwConflicts,
-				RequiredWith:  []string{parent + ".login_password"},
+				RequiredWith:  []string{parent + ".0.login_password_script"},
 			},
-			"login_password": {
-				Type:          schema.TypeString,
-				Sensitive:     true,
-				Optional:      true,
-				Description:   "Password for registry",
+			"login_password_script": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Description: "Command to be executed to obtain the registry login password. " +
+					"Password returned on STDOUT by the script.",
 				ConflictsWith: unPwConflicts,
-				RequiredWith:  []string{parent + ".login_username"},
+				RequiredWith:  []string{parent + ".0.login_username"},
 			},
 			"login_script": {
 				Type:     schema.TypeString,
@@ -84,7 +83,7 @@ func somewhereResource(parent string, imageDescription string, imageValidator sc
 				Optional:      true,
 				Elem:          schema.TypeString,
 				ConflictsWith: scriptConflicts,
-				RequiredWith:  []string{parent + ".login_script"},
+				RequiredWith:  []string{parent + ".0.login_script"},
 			},
 			"login_script_interpreter": {
 				Type:     schema.TypeList,
@@ -95,14 +94,14 @@ func somewhereResource(parent string, imageDescription string, imageValidator sc
 				Description: "The interpreter used to execute the script, defaults to" +
 					" [\"/bin/sh\", \"-c\"]",
 				ConflictsWith: scriptConflicts,
-				RequiredWith:  []string{parent + ".login_script"},
+				RequiredWith:  []string{parent + ".0.login_script"},
 			},
 			"working_directory": {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Default:       ".",
 				ConflictsWith: scriptConflicts,
-				RequiredWith:  []string{parent + ".login_script"},
+				RequiredWith:  []string{parent + ".0.login_script"},
 			},
 		},
 	}
@@ -223,8 +222,9 @@ type somewhere struct {
 	loginRetriesRemaining int
 	workingDirectory      string
 	loginUsername         string
-	loginPassword         string
+	loginPasswordCommand  string
 	unPwLogin             bool
+	imageOptions          *skopeoPkg.ImageOptions
 }
 
 func getSomewhereParams(d *schema.ResourceData, key string) (*somewhere, error) {
@@ -256,18 +256,18 @@ func getSomewhereParams(d *schema.ResourceData, key string) (*somewhere, error) 
 		interpreter = []string{"/bin/sh", "-c"}
 	}
 	params.loginInterpreter = interpreter
-	username, unPwLogin := d.GetOk(key + ".login_username")
+	username, unPwLogin := d.GetOk(key + ".0.login_username")
 	params.unPwLogin = unPwLogin
 	if unPwLogin {
 		params.loginUsername = username.(string)
-		params.loginPassword = d.Get(key + ".login_password").(string)
+		params.loginPasswordCommand = d.Get(key + ".0.login_password_script").(string)
 	}
+	params.imageOptions = newImageOptions(d)
 
 	return &params, nil
 }
 
-func withEndpointLogin(ctx context.Context, sw *somewhere, locked bool, op func(locked bool) (any, error)) (any,
-	error) {
+func (sw *somewhere) withEndpointLogin(ctx context.Context, locked bool, op func(locked bool) (any, error)) (any, error) {
 
 	//Try the operation without logging in first, as the credentials may already be in place
 	result, err := op(locked)
@@ -278,7 +278,7 @@ func withEndpointLogin(ctx context.Context, sw *somewhere, locked bool, op func(
 	sw.loginRetriesRemaining--
 
 	//Return error without attempting login if no login command is provided
-	if sw.loginCommand == "true" {
+	if sw.loginCommand == "true" && sw.unPwLogin == false {
 		return nil, err
 	}
 
@@ -300,7 +300,7 @@ func withEndpointLogin(ctx context.Context, sw *somewhere, locked bool, op func(
 	}
 
 	//Didn't succeed so login
-	err = doLogin(ctx, sw)
+	err = sw.doLogin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -309,23 +309,60 @@ func withEndpointLogin(ctx context.Context, sw *somewhere, locked bool, op func(
 	return op(true)
 }
 
-func doLogin(ctx context.Context, sw *somewhere) error {
+func (sw *somewhere) doLogin(ctx context.Context) error {
 	if sw.unPwLogin {
-		return doUnPwLogin(ctx, sw)
+		return sw.doUnPwLogin(ctx)
 	}
-	return doScriptLogin(ctx, sw)
+	return sw.doScriptLogin(ctx)
 }
 
-func doUnPwLogin(ctx context.Context, sw *somewhere) error {
+func (sw *somewhere) doUnPwLogin(ctx context.Context) error {
 
-	tflog.Info(ctx, "Login using user/pass", map[string]any{"image": sw.image})
+	tflog.Info(ctx, "Login using user/pass script", map[string]any{"image": sw.image})
 
-	// TODO
+	shell := sw.loginInterpreter[0]
+	flags := append(sw.loginInterpreter[1:], sw.loginPasswordCommand)
+	cmd := exec.CommandContext(ctx, shell, flags...)
+	cmd.Env = append(os.Environ(), sw.loginEnv...)
+	cmd.Stderr = providerlog.NewProviderLogWriter(
+		log.Default().Writer(),
+	)
+	defer cmd.Stderr.(*providerlog.ProviderLogWriter).Close()
+	cmd.Dir = sw.workingDirectory
 
+	passwordBytes, err := cmd.Output()
+	if err != nil {
+		tflog.Info(ctx, "Login password script failed", map[string]any{"image": sw.image, "err": err})
+		if _, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("Login password script failed for image %s: %s", sw.image, err.Error())
+		}
+		return err
+	}
+
+	opts := &skopeo.LoginOptions{
+		Image:    sw.imageOptions,
+		Username: sw.loginUsername,
+		Password: string(passwordBytes),
+	}
+
+	opts.Stdout = providerlog.NewProviderLogWriter(
+		log.Default().Writer(),
+	)
+	defer opts.Stdout.(*providerlog.ProviderLogWriter).Close()
+
+	tflog.Debug(ctx, "Logging in", map[string]any{"image": sw.image, "user": sw.loginUsername})
+	err = skopeo.Login(ctx, sw.image, opts)
+
+	if err != nil {
+		tflog.Info(ctx, "Login fail", map[string]any{"image": sw.image, "user": sw.loginUsername, "err": err})
+		return err
+	}
+
+	tflog.Info(ctx, "Logged on", map[string]any{"image": sw.image, "user": sw.loginUsername})
 	return nil
 }
 
-func doScriptLogin(ctx context.Context, sw *somewhere) error {
+func (sw *somewhere) doScriptLogin(ctx context.Context) error {
 
 	tflog.Info(ctx, "Login using script", map[string]any{"image": sw.image})
 
@@ -383,8 +420,8 @@ func resourceSkopeo2CopyCreate(ctx context.Context, d *schema.ResourceData, meta
 	src.loginRetriesRemaining = src.loginRetries + 1
 	dst.loginRetriesRemaining = dst.loginRetries + 1
 	for {
-		result, err := withEndpointLogin(ctx, src, false, func(locked bool) (any, error) {
-			return withEndpointLogin(ctx, dst, locked, func(_ bool) (any, error) {
+		result, err := src.withEndpointLogin(ctx, false, func(locked bool) (any, error) {
+			return dst.withEndpointLogin(ctx, locked, func(_ bool) (any, error) {
 				tflog.Debug(ctx, "Copying", map[string]any{"src-image": src.image, "image": dst.image})
 				result, err := skopeo.Copy(ctx, src.image, dst.image, newCopyOptions(d, reportWriter))
 				if err != nil {
@@ -418,7 +455,7 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 	dst.loginRetriesRemaining = dst.loginRetries + 1
 
 	for {
-		result, err := withEndpointLogin(ctx, dst, false, func(_ bool) (any, error) {
+		result, err := dst.withEndpointLogin(ctx, false, func(_ bool) (any, error) {
 			tflog.Debug(ctx, "Inspecting", map[string]any{"image": dst.image})
 			result, err := skopeo.Inspect(ctx, dst.image, newInspectOptions(d))
 			if err != nil {
@@ -480,7 +517,7 @@ func resourceSkopeo2CopyDelete(ctx context.Context, d *schema.ResourceData, meta
 	}
 
 	for {
-		_, err := withEndpointLogin(ctx, dst, false, func(_ bool) (any, error) {
+		_, err := dst.withEndpointLogin(ctx, false, func(_ bool) (any, error) {
 			tflog.Debug(ctx, "Deleting", map[string]any{"image": dst.image})
 			err := skopeoPkg.Delete(ctx, dst.image, newDeleteOptions(d))
 			if err != nil {
