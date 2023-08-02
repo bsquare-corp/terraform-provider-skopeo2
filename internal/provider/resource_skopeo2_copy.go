@@ -183,11 +183,12 @@ func resourceSkopeo2Copy() *schema.Resource {
 				Description: "keep image when Resource gets deleted. This currently needs to be set to `true` when working with GitHub Container registry.",
 			},
 			"preserve_digests": {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     false,
-				ForceNew:    true,
-				Description: "fail if we cannot preserve the source digests in the destination image.",
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+				ForceNew: true,
+				Description: "fail if we cannot preserve the source digests in the destination image and" +
+					" automatically detect when the source has a different digest to the destination",
 			},
 			"insecure": {
 				Type:        schema.TypeBool,
@@ -474,20 +475,13 @@ func resourceSkopeo2CopyCreate(ctx context.Context, d *schema.ResourceData, meta
 	}
 }
 
-func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
-	dst, err := getSomewhereParams(d, "destination")
-	if err != nil {
-		return diag.FromErr(err)
-	}
-
-	dst.loginRetriesRemaining = dst.loginRetries + 1
-
-	for {
-		result, err := dst.withEndpointLogin(ctx, false, func(_ bool) (any, error) {
-			tflog.Debug(ctx, "Inspecting", map[string]any{"image": dst.image})
-			result, err := skopeo.Inspect(ctx, dst.image, newInspectOptions(d))
+func (sw *somewhere) loginInspect(ctx context.Context, d *schema.ResourceData) (any, error) {
+	return sw.withEndpointLogin(ctx, false,
+		func(_ bool) (any, error) {
+			tflog.Debug(ctx, "Inspecting", map[string]any{"image": sw.image})
+			result, err := skopeo.Inspect(ctx, sw.image, newInspectOptions(d))
 			if err != nil {
-				tflog.Info(ctx, "Inspection failed", map[string]any{"image": dst.image, "err": err.Error()})
+				tflog.Info(ctx, "Inspection failed", map[string]any{"image": sw.image, "err": err.Error()})
 				//The underlying storage code does not reveal the 404 response code on a missing image.
 				//The only indication that an image is missing is the presence of "manifest unknown" in the error
 				//reported. This comes from the body of the 404 response and is therefore subject to the whim of the
@@ -506,20 +500,74 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 
 			return result, nil
 		})
+}
+
+func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	dst, err := getSomewhereParams(d, "destination")
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	dst.loginRetriesRemaining = dst.loginRetries + 1
+
+	for {
+		result, err := dst.loginInspect(ctx, d)
 
 		if err == nil {
 			if result == nil {
+				// Destination image does not exist
 				d.SetId("")
 				return nil
 			}
-			digest := result.(*skopeo.InspectOutput).Digest
-			tflog.Info(ctx, "Inspection", map[string]any{"image": dst.image, "digest": digest})
-			return diag.FromErr(d.Set("docker_digest", digest))
+			// if we are detecting changes to the source image break out here and continue on to inspecting the
+			// source image
+			if d.Get("preserve_digests").(bool) {
+				break
+			}
+			dstDigest := result.(*skopeo.InspectOutput).Digest
+			tflog.Info(ctx, "Inspection", map[string]any{"image": dst.image, "digest": dstDigest})
+			return diag.FromErr(d.Set("docker_digest", dstDigest))
 		}
 
 		tflog.Info(ctx, "Retries remaining", map[string]any{"count": dst.loginRetriesRemaining})
 		if dst.loginRetriesRemaining <= 0 {
-			return diag.FromErr(err)
+			// If we get an error the problem may be because the login script has changed, swallow the error and
+			// report the resource as deleted forcing the create copy operation.
+			tflog.Info(ctx, "Login errors during refresh, plan to recreate")
+			d.SetId("")
+			return nil
+		}
+	}
+
+	src, err := getSomewhereParams(d, "source")
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	src.loginRetriesRemaining = src.loginRetries + 1
+
+	for {
+		result, err := src.loginInspect(ctx, d)
+
+		if err == nil {
+			if result == nil {
+				// Source image does not exist
+				d.SetId("")
+				return nil
+			}
+
+			srcDigest := result.(*skopeo.InspectOutput).Digest
+			tflog.Info(ctx, "Inspection", map[string]any{"image": src.image, "digest": srcDigest})
+			return diag.FromErr(d.Set("docker_digest", srcDigest))
+		}
+
+		tflog.Info(ctx, "Retries remaining", map[string]any{"count": src.loginRetriesRemaining})
+		if src.loginRetriesRemaining <= 0 {
+			// If we get an error the problem may be because the login script has changed, swallow the error and
+			// report the resource as deleted forcing the create copy operation.
+			tflog.Info(ctx, "Login errors during refresh, plan to recreate")
+			d.SetId("")
+			return nil
 		}
 	}
 }
