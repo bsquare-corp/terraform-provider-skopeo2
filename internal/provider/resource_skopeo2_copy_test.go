@@ -108,6 +108,7 @@ func TestAccResourceSkopeo2(t *testing.T) {
 						"docker_digest"),
 				),
 			},
+
 			{
 				Config:      testAccCopyResourceFail(rName),
 				ExpectError: expectErrorRegExpr("requested access to the resource is denied"),
@@ -118,7 +119,15 @@ func TestAccResourceSkopeo2(t *testing.T) {
 			},
 			{
 				Config:      testAccCopyResourceLoginFail(rName),
-				ExpectError: expectErrorRegExpr("Login script failed"),
+				ExpectError: expectErrorRegExpr("login password script failed"),
+			},
+			{
+				Config:      testAccCopyResourceLoginTimeoutSrc(rName),
+				ExpectError: expectErrorRegExpr("login password script timed out"),
+			},
+			{
+				Config:      testAccCopyResourceLoginTimeoutDest(rName),
+				ExpectError: expectErrorRegExpr("login password script timed out"),
 			},
 			{
 				Config: testAccCopyResource_addTag(rName),
@@ -166,20 +175,27 @@ func TestAccResourceSkopeo2(t *testing.T) {
 					),
 				},
 
-					{ // TODO Login source can only be executed with an actual AWS account
-						Config: testAccCopyResource_loginSource(rName),
-						Check: resource.ComposeTestCheckFunc(
-							resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_login_source_%s", rName),
-								"docker_digest"),
-						),
-					},
-					{
-						Config: testAccCopyResource_loginSourceRetry(rName),
-						Check: resource.ComposeTestCheckFunc(
-							resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_login_source_retry_%s", rName),
-								"docker_digest"),
-						),
-					},
+				{ // TODO Login source can only be executed with an actual AWS account
+					Config: testAccCopyResource_loginSource(rName),
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_login_source_%s", rName),
+							"docker_digest"),
+					),
+				},
+				{
+					Config: testAccCopyResource_loginSourceRetry(rName),
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_login_source_retry_%s", rName),
+							"docker_digest"),
+					),
+				},
+				{ // TODO Login source can only be executed with an actual AWS account
+					Config: testAccCopyResource_loginSourceWithPassword(rName),
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.alpine_login_source_%s", rName),
+							"docker_digest"),
+					),
+				},
 			*/
 		},
 	})
@@ -275,6 +291,36 @@ func testAccCopyResourceLoginFail(name string) string {
 }`, name, name)
 }
 
+func testAccCopyResourceLoginTimeoutDest(name string) string {
+	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_login_timeout_dest_%s" {
+    source {
+	  image = "docker://alpine-bad"
+      login_script = "true"
+    }
+    destination {
+	  image = "docker://127.0.0.1:9016/alpine-login-timeout-dest-%s"
+      login_script = "sleep 5"
+	  timeout = 2
+    }
+    insecure = true
+}`, name, name)
+}
+
+func testAccCopyResourceLoginTimeoutSrc(name string) string {
+	return fmt.Sprintf(`resource "skopeo2_copy" "alpine_login_timeout_src_%s" {
+    source {
+	  image = "docker://alpine-bad"
+      login_script = "sleep 5"
+	  timeout = 2
+    }
+    destination {
+	  image = "docker://127.0.0.1:9016/alpine-login-timeout-src-%s"
+      login_script = "true"
+    }
+    insecure = true
+}`, name, name)
+}
+
 func testAccCopyResource_loginSource(name string) string {
 	return fmt.Sprintf(`
 resource "skopeo2_copy" "alpine_login_source_%s" {
@@ -301,6 +347,22 @@ resource "skopeo2_copy" "alpine_login_source_2_%s" {
     insecure = true
 }
 `, name, name, name, name)
+}
+
+func testAccCopyResource_loginSourceWithPassword(name string) string {
+	return fmt.Sprintf(`
+resource "skopeo2_copy" "alpine_login_source_%s" {
+    source {
+	  image         = "docker://753989949864.dkr.ecr.us-west-1.amazonaws.com/ecr-public/docker/library/alpine"
+      login_username = "AWS"
+      login_password = "eyJwYXlsb2FkIjoiWW5xb243U0JxSWdHS1ZzMEFrRm1zcDJvdWNleW1ZQ3p3eThxWGF3MlVwSGhWUzIrSjRJbUx6Q1Q5Y3ZPOTlQZGZiY0NUZ3YzTTRJZGVuSFc5QWFyRkJpdTlteFZsckRVOUNPTTYzcjBpUVhzUWJiVFF3dmxyOEptTlBFeWJtYUZQbDQySkRGR0NqY3ZOTC9wUDFoSS9FaWJnUHNUOEpqR0QxKzFWemh6cHNsNlpyNm9YKy9icGh1ZEMwSU9FZnlFc0Fxd01aTUdha1dZeE5LS3k4VVpTYVE0QXd2NEdJd2d4SmxZRjc4dS9RUGdJOExYcjRZTFBYRk9WU0FYSDFydTFRVXdMeDNWSG1uRmh0T0REUmV5ei9xN1duc3E1M3Q1MUdXTm5JcVBsdXNlVWhFcmsyTWp5c040US9NL2REcVZDMGtCZ2dFNnU3WS92Z1lqdW1mOThBdFhkMHJpMVUxNGxFR2RvSW5qaCtkQUFRcTY0YnNQaXpHVjRCdmM2ejl1eXUzbTllQzAzVzczRjM0UXNLM0wxQ0NTM2N6TjZtZGhYNWhaelNKR1U4R015a3Z6Z0xjWjVvYVg5RVlLZnpZWXVPdFVVcWhQenVHNGpVSm9tSnNsaDNyYlNTMkQ5aWZCMHRUWFhybGc5NjhCMTBJZ3NSVkJOWndnRjBaSEtxZFFpSGlKcmpGaFlyVVpKQTN4TFo0R2puNlBObEF1Q0ROZjlzakNFdWhSWi8zUXdFRi9PVHZmTmltUkcydjNob245MUVpYTBhZEcrUThVU2VveHNZTFNoY0pmYVJ4YmNCUDlTVGhRTitNUlh2cjRUM3orRzJQM2ZML25hSk5xbkgrTDdoSEUzNWtYUXBRbjV3QVlSZTREaHcydm5pR2w1elBFNklqWm15KytEYjE1aHJPU0xUNE9aSmVLd3Nzc251Ym0zY0FlWGQxRXNVeDV2RUZOTVoyYkVlUTlrNW5vcVZ4bzZuVG5ENkNLZTJPM1lkWXdVaU9KNXZxa2pxRlBFd1k5bmlWMUZyVFh0dmU2VjlTK0VQQnlzNStJbkR6enkrV05MREdNUURmY1c1Y0U5aDZhNkZuYzlHQWdCOHRzczdWNUsrVm93Z0ltenN6dXQwNk9Na0tKbXhoV3ZncFBSN3l5NjErbXRLR2U1SWs5UHBHN1ZKOEw3ODR2NFVBMDNOWXY3d2U4QmdPUlgyeDB1U2JramN1QTRSazQvZXc1L1NNUzRBU2cxdGJrRDV6NXI4cytZcFlwRTlOQVJJS1VwS05qK2JVb2xlUmZZSVErVTAyTjMrcVdxeFY4cmZoSGtYSWdhRGprM3ZNbk5zL1dEQkV5S25mY29IV0I5UHg4YnVmV2hvU1pPcTUvc2JpM0NHQ3ZrYm9HSGN0WUZGZ3JMVklKOUtsUnlDOS95cVNiVWpVUGJocThsOG9OWDZWTHNaY05kS25UYTBQd0F5VkNSN2gxeXFITFpJdnlJcDU1Yld3eUVzSWZPTUpscVlPUjlqRGVndGdGNmtzek5nUXU5OWVaWm5vc1RWMHB0cnpFdEYxZHNNQ1VoR0NnSmNJbGJYR1hmRUdKNVB4VUJ6V0hDZFNYWEJ2RkNMODRmak9LR0lBMmVqczlwOENFajRSUmROa3dRNW41b2JlRDRyRHk4RGhWVm8rSUI2YU1FdWdGWUs1TkoxM2xuUnJOV2pnMk1JMlpwMkdBeG4yQURSNEd2ZjZNTFJqaHV2aHlwWk85YkhnVVFQRTh2ZEhVWlo5aCIsImRhdGFrZXkiOiJBUUVCQUhpakVGWEd3RjFjaXBWT2FjRzhxUm1Kb1ZCUGF5OExVVXZVOFJDVlYwWG9Id0FBQUg0d2ZBWUpLb1pJaHZjTkFRY0dvRzh3YlFJQkFEQm9CZ2txaGtpRzl3MEJCd0V3SGdZSllJWklBV1VEQkFFdU1CRUVERjRoVnpXVmRCRGh2eitQVFFJQkVJQTd2aGxCWUdnNFozRXc2NSthMlpqdUdta0xmODkxbkdhS2ZDZTJuM2UrTjE2eitYVW1TVEFpd1BVaUllN0IxVDBtc001UWtlQVNiWFRaNG1zPSIsInZlcnNpb24iOiIyIiwidHlwZSI6IkRBVEFfS0VZIiwiZXhwaXJhdGlvbiI6MTY5MDg1NDQ5M30="
+    }
+    destination {
+	  image = "docker://127.0.0.1:9016/alpine-login-source-with-password-%s"
+    }
+    insecure = true
+}
+`, name, name)
 }
 
 func testAccCopyResource_loginSourceRetry(name string) string {
