@@ -16,7 +16,7 @@ resource "skopeo2_copy" "default" {
   source {
     image                 = "docker://753989949864.dkr.ecr.us-west-1.amazonaws.com/ecr-public/docker/library/busybox:uclibc"
     login_username        = "AWS"
-    login_password_script = "aws --profile bsquare-jenkins2-moved ecr get-login-password --region=us-west-1"
+    login_password_script = "./src_login_password.sh"
     timeout               = 9
   }
   destination {
