@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -390,6 +391,7 @@ func (sw *somewhere) doUnPwLogin(ctx context.Context, password string) error {
 
 type cmdResult struct {
 	outb []byte
+	errb []byte
 	err  error
 }
 
@@ -404,8 +406,11 @@ func (sw *somewhere) runLoginPasswordScript(ctx context.Context, script string) 
 	cmdDone := make(chan cmdResult, 1)
 
 	go func() {
-		stdOutErr, err := cmd.CombinedOutput()
-		cmdDone <- cmdResult{err: err, outb: stdOutErr}
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		cmdDone <- cmdResult{err: err, outb: stdout.Bytes(), errb: stderr.Bytes()}
 	}()
 
 	select {
@@ -417,7 +422,7 @@ func (sw *somewhere) runLoginPasswordScript(ctx context.Context, script string) 
 			tflog.Info(ctx, "Login password script failed", map[string]any{"image": sw.image, "err": result.err})
 			if _, ok := result.err.(*exec.ExitError); ok {
 				return "", fmt.Errorf("login password script failed for image %s: %s %s", sw.image,
-					result.err.Error(), string(result.outb))
+					result.err.Error(), string(result.errb))
 			}
 			return "", result.err
 		}
@@ -533,7 +538,7 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 		if dst.loginRetriesRemaining <= 0 {
 			// If we get an error the problem may be because the login script has changed, swallow the error and
 			// report the resource as deleted forcing the create copy operation.
-			tflog.Info(ctx, "Login errors during refresh, plan to recreate")
+			tflog.Warn(ctx, "Login errors during refresh, plan to recreate", map[string]any{"error": err.Error()})
 			d.SetId("")
 			return nil
 		}
@@ -565,7 +570,7 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 		if src.loginRetriesRemaining <= 0 {
 			// If we get an error the problem may be because the login script has changed, swallow the error and
 			// report the resource as deleted forcing the create copy operation.
-			tflog.Info(ctx, "Login errors during refresh, plan to recreate")
+			tflog.Warn(ctx, "Login errors during refresh, plan to recreate", map[string]any{"error": err.Error()})
 			d.SetId("")
 			return nil
 		}
