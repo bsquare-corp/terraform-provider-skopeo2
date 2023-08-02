@@ -13,22 +13,24 @@ Copy resource in the Terraform provider skopeo2.
 ## Example Usage
 
 ```terraform
-resource "skopeo2_copy" "example" {
+resource "skopeo2_copy" "external-script-login" {
   source {
-    image         = "docker://753989949864.dkr.ecr.us-west-1.amazonaws.com/blib/deployed-container-scanner-trivy:latest"
-    login_script  = "aws --profile $MY_PROFILE ecr get-login-password --region us-west-1 | docker login --username AWS --password-stdin 753989949864.dkr.ecr.us-west-1.amazonaws.com"
+    image         = "docker://000000000000.dkr.ecr.eu-west-1.amazonaws.com/my-image:latest"
+    login_script  = "aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin 000000000000.dkr.ecr.eu-west-1.amazonaws.com"
     login_retries = 3
     login_environment = {
-      MY_PROFILE = "bsquare-jenkins2"
+      AWS_PROFILE = "default"
     }
     login_script_interpreter = ["/bin/sh", "-c"]
   }
   destination {
-    image         = "docker://329020582682.dkr.ecr.us-west-2.amazonaws.com/blib/deployed-container-scanner-trivy:latest"
-    login_script  = "aws --profile $MY_PROFILE ecr get-login-password --region us-west-1 | docker login --username AWS --password-stdin 753989949864.dkr.ecr.us-west-1.amazonaws.com"
+    image         = "docker://111111111111.dkr.ecr.us-west-2.amazonaws.com/my-image:latest"
+    login_script  = "aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 111111111111.dkr.ecr.us-west-2.amazonaws.com"
     login_retries = 3
     login_environment = {
-      MY_PROFILE = "bsquare-jenkins2"
+      AWS_ACCESS_KEY_ID     = "AKIAIOSFODNN7EXAMPLE"
+      AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+      AWS_DEFAULT_REGION    = "us-west-2"
     }
     login_script_interpreter = ["/bin/sh", "-c"]
   }
@@ -36,7 +38,79 @@ resource "skopeo2_copy" "example" {
   preserve_digests = true
   retries          = 3
   retry_delay      = 10
-  additional_tags  = ["deployed-container-scanner-trivy:my-tag"]
+  additional_tags  = ["my-image:my-tag"]
+  keep_image       = false
+}
+
+resource "skopeo2_copy" "internal-login-external-script-for-password" {
+  source {
+    image                 = "docker://000000000000.dkr.ecr.eu-west-1.amazonaws.com/my-image:latest"
+    login_username        = "AWS"
+    login_password_script = "aws ecr get-login-password --region eu-west-1"
+    login_retries         = 3
+    login_environment = {
+      AWS_PROFILE = "default"
+    }
+    login_script_interpreter = ["/bin/sh", "-c"]
+  }
+  destination {
+    image                 = "docker://111111111111.dkr.ecr.us-west-2.amazonaws.com/my-image:latest"
+    login_username        = "AWS"
+    login_password_script = "aws ecr get-login-password --region us-west-2"
+    login_retries         = 3
+    login_environment = {
+      AWS_ACCESS_KEY_ID     = "AKIAIOSFODNN7EXAMPLE"
+      AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+      AWS_DEFAULT_REGION    = "us-west-2"
+    }
+    login_script_interpreter = ["/bin/sh", "-c"]
+  }
+  insecure         = false
+  preserve_digests = true
+  retries          = 3
+  retry_delay      = 10
+  additional_tags  = ["my-image:my-tag"]
+  keep_image       = false
+}
+
+provider "aws" {
+  alias  = "source"
+  region = "eu-west-1"
+}
+
+provider "aws" {
+  alias  = "dest"
+  region = "us-west-2"
+
+  assume_role {
+    role_arn = "arn:aws:iam::111111111111:role/dest-access"
+  }
+}
+
+data "aws_ecr_authorization_token" "source" {
+  provider = aws.source
+}
+
+data "aws_ecr_authorization_token" "dest" {
+  provider = aws.dest
+}
+
+resource "skopeo2_copy" "internal-login" {
+  source {
+    image          = "docker://000000000000.dkr.ecr.eu-west-1.amazonaws.com/my-image:latest"
+    login_username = data.aws_ecr_authorization_token.source.user_name
+    login_password = data.aws_ecr_authorization_token.source.password
+  }
+  destination {
+    image          = "docker://111111111111.dkr.ecr.us-west-2.amazonaws.com/my-image:latest"
+    login_username = data.aws_ecr_authorization_token.dest.user_name
+    login_password = data.aws_ecr_authorization_token.dest.password
+  }
+  insecure         = false
+  preserve_digests = true
+  retries          = 3
+  retry_delay      = 10
+  additional_tags  = ["my-image:my-tag"]
   keep_image       = false
 }
 ```
@@ -56,7 +130,7 @@ resource "skopeo2_copy" "example" {
 - `docker_digest` (String) digest string for the destination image.
 - `insecure` (Boolean) allow access to non-TLS insecure repositories.
 - `keep_image` (Boolean) keep image when Resource gets deleted. This currently needs to be set to `true` when working with GitHub Container registry.
-- `preserve_digests` (Boolean) fail if we cannot preserve the source digests in the destination image.
+- `preserve_digests` (Boolean) fail if we cannot preserve the source digests in the destination image and automatically detect when the source has a different digest to the destination
 - `retries` (Number) Retry the copy operation following transient failure. Retrying following access failure error is configured through login_retries.
 - `retry_delay` (Number) Delay between retry attempts, in seconds.
 
@@ -72,16 +146,20 @@ Required:
 - `image` (String) specified as a "transport":"details" format.
 
 Supported transports:
-`containers-storage`, `dir`, `docker`, `docker-archive`, `docker-daemon`, `oci`, `oci-archive`, `ostree`, `sif`, `tarball`.
+`containers-storage`, `dir`, `docker`, `docker-archive`, `docker-daemon`, `oci`, `oci-archive`, `ostree`, `sif`, `tarball`
 When working with GitHub Container registry `keep_image` needs to be set to `true`.
 
 Optional:
 
-- `login_environment` (Map of String)
-- `login_retries` (Number) Either if the login_script reports failure with non-exit code, or if following successful login the copy operation fails, retry this number of times.
-- `login_script` (String) Command to be executed by the login_script_interpreter to authenticate following skopeo operations
-- `login_script_interpreter` (List of String) The interpreter used to execute the script, defaults to ["/bin/sh", "-c"]
-- `working_directory` (String)
+- `login_environment` (Map of String) Map of environment variables passed to the login_script/login_password_script
+- `login_password` (String) Registry login password
+- `login_password_script` (String) Script to be executed to obtain the registry login password to be used to skopeo login. Password returned on STDOUT by the script.
+- `login_retries` (Number) Either if the login_script/login_password_script reports failure with non-exit code, or if following successful login the copy operation fails, retry this number of times.
+- `login_script` (String) Script to be executed by the login_script_interpreter to authenticate following skopeo operations
+- `login_script_interpreter` (List of String) The interpreter used to execute the login_script/login_password_script, defaults to ["/bin/sh", "-c"]
+- `login_username` (String) Registry login username
+- `timeout` (Number) Timeout for login_script/login_password_script to execute in seconds
+- `working_directory` (String) The working directory in which to execute the login_script/login_password_script
 
 
 <a id="nestedblock--source"></a>
@@ -96,10 +174,14 @@ Supported transports:
 
 Optional:
 
-- `login_environment` (Map of String)
-- `login_retries` (Number) Either if the login_script reports failure with non-exit code, or if following successful login the copy operation fails, retry this number of times.
-- `login_script` (String) Command to be executed by the login_script_interpreter to authenticate following skopeo operations
-- `login_script_interpreter` (List of String) The interpreter used to execute the script, defaults to ["/bin/sh", "-c"]
-- `working_directory` (String)
+- `login_environment` (Map of String) Map of environment variables passed to the login_script/login_password_script
+- `login_password` (String) Registry login password
+- `login_password_script` (String) Script to be executed to obtain the registry login password to be used to skopeo login. Password returned on STDOUT by the script.
+- `login_retries` (Number) Either if the login_script/login_password_script reports failure with non-exit code, or if following successful login the copy operation fails, retry this number of times.
+- `login_script` (String) Script to be executed by the login_script_interpreter to authenticate following skopeo operations
+- `login_script_interpreter` (List of String) The interpreter used to execute the login_script/login_password_script, defaults to ["/bin/sh", "-c"]
+- `login_username` (String) Registry login username
+- `timeout` (Number) Timeout for login_script/login_password_script to execute in seconds
+- `working_directory` (String) The working directory in which to execute the login_script/login_password_script
 
 
