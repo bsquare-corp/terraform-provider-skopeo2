@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -33,12 +34,21 @@ Supported transports:
 	loginInProgress sync.Mutex
 )
 
+func subRes(prefix, res string) string {
+	return prefix + ".0." + res
+}
+
+func subResArray(prefix string, refs ...string) []string {
+	out := make([]string, len(refs))
+	for i := range refs {
+		out[i] = subRes(prefix, refs[i])
+	}
+	return out
+}
+
 // somewhere can be the source or destination
 func somewhereResource(parent string, imageDescription string, imageValidator schema.SchemaValidateDiagFunc) *schema.
 	Resource {
-	unPwConflicts := []string{parent + ".0.login_script"}
-	scriptConflicts := []string{parent + ".0.login_password_script", parent + ".0.login_username"}
-
 	return &schema.Resource{
 		Schema: map[string]*schema.Schema{
 			"image": {
@@ -50,40 +60,46 @@ func somewhereResource(parent string, imageDescription string, imageValidator sc
 			"login_username": {
 				Type:          schema.TypeString,
 				Optional:      true,
-				Description:   "Password for registry",
-				ConflictsWith: unPwConflicts,
-				RequiredWith:  []string{parent + ".0.login_password_script"},
+				Description:   "Registry login username",
+				ConflictsWith: subResArray(parent, "login_script"),
+			},
+			"login_password": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				Description:   "Registry login password",
+				ConflictsWith: subResArray(parent, "login_script", "login_password_script"),
+				RequiredWith:  subResArray(parent, "login_username"),
 			},
 			"login_password_script": {
 				Type:     schema.TypeString,
 				Optional: true,
-				Description: "Command to be executed to obtain the registry login password. " +
-					"Password returned on STDOUT by the script.",
-				ConflictsWith: unPwConflicts,
-				RequiredWith:  []string{parent + ".0.login_username"},
+				Description: "Script to be executed to obtain the registry login password to be used to skopeo login." +
+					" Password returned on STDOUT by the script.",
+				ConflictsWith: subResArray(parent, "login_script", "login_password"),
+				RequiredWith:  subResArray(parent, "login_username"),
 			},
 			"login_script": {
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  "true",
-				Description: "Command to be executed by the login_script_interpreter to authenticate" +
+				Description: "Script to be executed by the login_script_interpreter to authenticate" +
 					" following skopeo operations",
-				ConflictsWith: scriptConflicts,
+				ConflictsWith: subResArray(parent, "login_username", "login_password", "login_password_script"),
 			},
 			"login_retries": {
 				Type:     schema.TypeInt,
 				Optional: true,
 				Default:  "0",
-				Description: "Either if the login_script reports failure with non-exit code, " +
-					"or if following successful login the copy operation fails, " +
-					"retry this number of times.",
+				Description: "Either if the login_script/login_password_script reports failure with non-exit code, " +
+					"or if following successful login the copy operation fails, retry this number of times.",
+				ConflictsWith: subResArray(parent, "login_password"),
 			},
 			"login_environment": {
 				Type:          schema.TypeMap,
 				Optional:      true,
 				Elem:          schema.TypeString,
-				ConflictsWith: scriptConflicts,
-				RequiredWith:  []string{parent + ".0.login_script"},
+				Description:   "Map of environment variables passed to the login_script/login_password_script",
+				ConflictsWith: subResArray(parent, "login_password"),
 			},
 			"login_script_interpreter": {
 				Type:     schema.TypeList,
@@ -91,17 +107,23 @@ func somewhereResource(parent string, imageDescription string, imageValidator sc
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
-				Description: "The interpreter used to execute the script, defaults to" +
+				Description: "The interpreter used to execute the login_script/login_password_script, defaults to" +
 					" [\"/bin/sh\", \"-c\"]",
-				ConflictsWith: scriptConflicts,
-				RequiredWith:  []string{parent + ".0.login_script"},
+				ConflictsWith: subResArray(parent, "login_password"),
 			},
 			"working_directory": {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Default:       ".",
-				ConflictsWith: scriptConflicts,
-				RequiredWith:  []string{parent + ".0.login_script"},
+				Description:   "The working directory in which to execute the login_script/login_password_script",
+				ConflictsWith: subResArray(parent, "login_password"),
+			},
+			"timeout": {
+				Type:          schema.TypeInt,
+				Optional:      true,
+				Default:       "60",
+				Description:   "Timeout for login_script/login_password_script to execute in seconds",
+				ConflictsWith: subResArray(parent, "login_password"),
 			},
 		},
 	}
@@ -215,16 +237,19 @@ var ghcr = regexp.MustCompile(`(?::\/\/)?ghcr\.io\/`)
 // We copy from *somewhere* to *somewhere*
 type somewhere struct {
 	image                 string
-	loginCommand          string
+	loginScript           string
 	loginRetries          int
 	loginEnv              []string
 	loginInterpreter      []string
 	loginRetriesRemaining int
 	workingDirectory      string
 	loginUsername         string
-	loginPasswordCommand  string
+	loginPassword         string
+	loginPasswordScript   string
 	unPwLogin             bool
+	pwScript              bool
 	imageOptions          *skopeoPkg.ImageOptions
+	cmdTimeout            time.Duration
 }
 
 func getSomewhereParams(d *schema.ResourceData, key string) (*somewhere, error) {
@@ -234,7 +259,7 @@ func getSomewhereParams(d *schema.ResourceData, key string) (*somewhere, error) 
 
 	params := somewhere{}
 	params.image = e["image"].(string)
-	params.loginCommand = e["login_script"].(string)
+	params.loginScript = e["login_script"].(string)
 	params.workingDirectory = e["working_directory"].(string)
 	if lr := e["login_retries"]; lr != nil {
 		params.loginRetries = lr.(int)
@@ -256,13 +281,23 @@ func getSomewhereParams(d *schema.ResourceData, key string) (*somewhere, error) 
 		interpreter = []string{"/bin/sh", "-c"}
 	}
 	params.loginInterpreter = interpreter
-	username, unPwLogin := d.GetOk(key + ".0.login_username")
+	username, unPwLogin := d.GetOk(subRes(key, "login_username"))
 	params.unPwLogin = unPwLogin
 	if unPwLogin {
 		params.loginUsername = username.(string)
-		params.loginPasswordCommand = d.Get(key + ".0.login_password_script").(string)
+		if loginPasswordScript, ok := d.GetOk(subRes(key, "login_password_script")); ok {
+			params.loginPasswordScript = loginPasswordScript.(string)
+			params.pwScript = true
+		} else if loginPassword, ok := d.GetOk(subRes(key, "login_password")); ok {
+			params.loginPassword = loginPassword.(string)
+			params.pwScript = false
+		} else {
+			return nil, fmt.Errorf("either login_password or login_password_script needs to be specified")
+		}
+		params.loginPasswordScript = d.Get(subRes(key, "login_password_script")).(string)
 	}
 	params.imageOptions = newImageOptions(d)
+	params.cmdTimeout = time.Duration(d.Get(subRes(key, "timeout")).(int)) * time.Second
 
 	return &params, nil
 }
@@ -278,7 +313,7 @@ func (sw *somewhere) withEndpointLogin(ctx context.Context, locked bool, op func
 	sw.loginRetriesRemaining--
 
 	//Return error without attempting login if no login command is provided
-	if sw.loginCommand == "true" && sw.unPwLogin == false {
+	if sw.loginScript == "true" && sw.unPwLogin == false {
 		return nil, err
 	}
 
@@ -310,39 +345,29 @@ func (sw *somewhere) withEndpointLogin(ctx context.Context, locked bool, op func
 }
 
 func (sw *somewhere) doLogin(ctx context.Context) error {
+	var err error
 	if sw.unPwLogin {
-		return sw.doUnPwLogin(ctx)
+		var password = sw.loginPassword
+		if sw.pwScript {
+			if password, err = sw.runLoginPasswordScript(ctx, sw.loginPasswordScript); err != nil {
+				return err
+			}
+		}
+		return sw.doUnPwLogin(ctx, password)
 	}
-	return sw.doScriptLogin(ctx)
+	_, err = sw.runLoginPasswordScript(ctx, sw.loginScript)
+	return err
 }
 
-func (sw *somewhere) doUnPwLogin(ctx context.Context) error {
+func (sw *somewhere) doUnPwLogin(ctx context.Context, password string) error {
 
-	tflog.Info(ctx, "Login using user/pass script", map[string]any{"image": sw.image})
-
-	shell := sw.loginInterpreter[0]
-	flags := append(sw.loginInterpreter[1:], sw.loginPasswordCommand)
-	cmd := exec.CommandContext(ctx, shell, flags...)
-	cmd.Env = append(os.Environ(), sw.loginEnv...)
-	cmd.Stderr = providerlog.NewProviderLogWriter(
-		log.Default().Writer(),
-	)
-	defer cmd.Stderr.(*providerlog.ProviderLogWriter).Close()
-	cmd.Dir = sw.workingDirectory
-
-	passwordBytes, err := cmd.Output()
-	if err != nil {
-		tflog.Info(ctx, "Login password script failed", map[string]any{"image": sw.image, "err": err})
-		if _, ok := err.(*exec.ExitError); ok {
-			return fmt.Errorf("Login password script failed for image %s: %s", sw.image, err.Error())
-		}
-		return err
-	}
+	tflog.Info(ctx, "Login using user/pass script", map[string]any{"image": sw.image, "username": sw.loginUsername})
+	var err error
 
 	opts := &skopeo.LoginOptions{
 		Image:    sw.imageOptions,
 		Username: sw.loginUsername,
-		Password: string(passwordBytes),
+		Password: password,
 	}
 
 	opts.Stdout = providerlog.NewProviderLogWriter(
@@ -362,40 +387,41 @@ func (sw *somewhere) doUnPwLogin(ctx context.Context) error {
 	return nil
 }
 
-func (sw *somewhere) doScriptLogin(ctx context.Context) error {
+type cmdResult struct {
+	outb []byte
+	err  error
+}
 
-	tflog.Info(ctx, "Login using script", map[string]any{"image": sw.image})
+func (sw *somewhere) runLoginPasswordScript(ctx context.Context, script string) (string, error) {
 
 	shell := sw.loginInterpreter[0]
-	flags := append(sw.loginInterpreter[1:], sw.loginCommand)
+	flags := append(sw.loginInterpreter[1:], script)
 	cmd := exec.CommandContext(ctx, shell, flags...)
 	cmd.Env = append(os.Environ(), sw.loginEnv...)
-	cmd.Stdout = providerlog.NewProviderLogWriter(
-		log.Default().Writer(),
-	)
-	defer cmd.Stdout.(*providerlog.ProviderLogWriter).Close()
-	cmd.Stderr = providerlog.NewProviderLogWriter(
-		log.Default().Writer(),
-	)
-	defer cmd.Stderr.(*providerlog.ProviderLogWriter).Close()
 	cmd.Dir = sw.workingDirectory
 
-	err := cmd.Start()
-	if err != nil {
-		tflog.Info(ctx, "Login fail", map[string]any{"image": sw.image, "err": err})
-		return err
-	}
+	cmdDone := make(chan cmdResult, 1)
 
-	err = cmd.Wait()
-	if err != nil {
-		tflog.Info(ctx, "Login fail", map[string]any{"image": sw.image, "err": err})
-		if _, ok := err.(*exec.ExitError); ok {
-			return fmt.Errorf("Login script failed for image %s: %s", sw.image, err.Error())
+	go func() {
+		stdOutErr, err := cmd.CombinedOutput()
+		cmdDone <- cmdResult{err: err, outb: stdOutErr}
+	}()
+
+	select {
+	case <-time.After(sw.cmdTimeout):
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		return "", fmt.Errorf("login password script timed out for image %s", sw.image)
+	case result := <-cmdDone:
+		if result.err != nil {
+			tflog.Info(ctx, "Login password script failed", map[string]any{"image": sw.image, "err": result.err})
+			if _, ok := result.err.(*exec.ExitError); ok {
+				return "", fmt.Errorf("login password script failed for image %s: %s %s", sw.image,
+					result.err.Error(), string(result.outb))
+			}
+			return "", result.err
 		}
-		return err
+		return string(result.outb), nil
 	}
-
-	return nil
 }
 
 func resourceSkopeo2CopyCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
@@ -440,6 +466,8 @@ func resourceSkopeo2CopyCreate(ctx context.Context, d *schema.ResourceData, meta
 			return diag.FromErr(d.Set("docker_digest", digest))
 		}
 
+		tflog.Info(ctx, "Retries remaining", map[string]any{"source_count": src.loginRetriesRemaining,
+			"destination_count": dst.loginRetriesRemaining})
 		if src.loginRetriesRemaining <= 0 || dst.loginRetriesRemaining <= 0 {
 			return diag.FromErr(err)
 		}
