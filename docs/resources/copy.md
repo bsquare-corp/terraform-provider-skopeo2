@@ -183,5 +183,3 @@ Optional:
 - `login_username` (String) Registry login username
 - `timeout` (Number) Timeout for login_script/login_password_script to execute in seconds
 - `working_directory` (String) The working directory in which to execute the login_script/login_password_script
-
-
