@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/transports"
 	"github.com/containers/image/v5/transports/alltransports"
+	"github.com/go-cmd/cmd"
 	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"log"
@@ -20,7 +20,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -399,35 +398,42 @@ func (sw *somewhere) runLoginPasswordScript(ctx context.Context, script string) 
 
 	shell := sw.loginInterpreter[0]
 	flags := append(sw.loginInterpreter[1:], script)
-	cmd := exec.CommandContext(ctx, shell, flags...)
-	cmd.Env = append(os.Environ(), sw.loginEnv...)
-	cmd.Dir = sw.workingDirectory
+	loginCmd := cmd.NewCmdOptions(cmd.Options{Buffered: true}, shell, flags...)
+	loginCmd.Env = append(os.Environ(), sw.loginEnv...)
+	loginCmd.Dir = sw.workingDirectory
 
-	cmdDone := make(chan cmdResult, 1)
+	statusChan := loginCmd.Start()
 
 	go func() {
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		err := cmd.Run()
-		cmdDone <- cmdResult{err: err, outb: stdout.Bytes(), errb: stderr.Bytes()}
+		<-time.After(sw.cmdTimeout)
+		err := loginCmd.Stop()
+		if err != nil {
+			tflog.Info(ctx, "Login password script failed to be stopped after timeout",
+				map[string]any{"image": sw.image, "err": err})
+		}
 	}()
 
-	select {
-	case <-time.After(sw.cmdTimeout):
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		return "", fmt.Errorf("login password script timed out for image %s", sw.image)
-	case result := <-cmdDone:
-		if result.err != nil {
-			tflog.Info(ctx, "Login password script failed", map[string]any{"image": sw.image, "err": result.err})
-			if _, ok := result.err.(*exec.ExitError); ok {
-				return "", fmt.Errorf("login password script failed for image %s: %s %s", sw.image,
-					result.err.Error(), string(result.errb))
-			}
-			return "", result.err
-		}
-		return string(result.outb), nil
+	result := <-statusChan
+	if !result.Complete {
+		tflog.Warn(ctx, "Login password script timed out or was signalled", map[string]any{"image": sw.image})
+		return "", fmt.Errorf("login password script timed out or was signalled for image %s", sw.image)
 	}
+	if result.Error != nil {
+		tflog.Info(ctx, "Login password script failed", map[string]any{"image": sw.image, "err": result.Error})
+		if _, ok := result.Error.(*exec.ExitError); ok {
+			return "", fmt.Errorf("login password script failed for image %s: %s\n%s", sw.image,
+				result.Error.Error(), strings.Join(result.Stderr, "\n"))
+		}
+		return "", result.Error
+	}
+	if result.Exit != 0 {
+		tflog.Info(ctx, "Login password script returned non-zero exit status", map[string]any{"image": sw.image,
+			"status": result.Exit})
+		return "", fmt.Errorf("login password script failed with non-zero exit status for image %s exit"+
+			" status: %d\n%s",
+			sw.image, result.Exit, strings.Join(result.Stderr, "\n"))
+	}
+	return strings.Join(result.Stdout, ""), nil
 }
 
 func resourceSkopeo2CopyCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
