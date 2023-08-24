@@ -3,8 +3,8 @@ module github.com/bsquare-corp/terraform-provider-skopeo2
 go 1.18
 
 require (
-	github.com/containers/common v0.55.2
-	github.com/containers/image/v5 v5.26.1
+	github.com/containers/common v0.55.4
+	github.com/containers/image/v5 v5.26.2
 	github.com/containers/ocicrypt v1.1.8
 	github.com/containers/storage v1.49.0
 	github.com/docker/docker v24.0.2+incompatible
