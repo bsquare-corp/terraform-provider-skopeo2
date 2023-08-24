@@ -233,7 +233,11 @@ func validateDestinationImage(v interface{}, p cty.Path) diag.Diagnostics {
 	return nil
 }
 
-var ghcr = regexp.MustCompile(`(?::\/\/)?ghcr\.io\/`)
+var ghcr = regexp.MustCompile(`^\w+:\/\/ghcr\.io\/|^ghcr\.io\/`)
+
+func IsGhcr(image *string) bool {
+	return ghcr.Match([]byte(*image))
+}
 
 // We copy from *somewhere* to *somewhere*
 type somewhere struct {
@@ -599,7 +603,7 @@ func resourceSkopeo2CopyDelete(ctx context.Context, d *schema.ResourceData, meta
 		return diag.FromErr(err)
 	}
 
-	if ghcr.Match([]byte(dst.image)) {
+	if IsGhcr(&dst.image) {
 		return diag.Errorf("GitHub does not support deleting specific container images. Set keep_image to true.")
 	}
 

@@ -489,3 +489,29 @@ func testAccCopyResource_addTag(name string) string {
     insecure          = true
 }`, name, name)
 }
+
+func TestAccResourceSkopeo2_ghcrMatch(t *testing.T) {
+	// Check the matching cases
+	images := []string{
+		"ghcr.io/external-secrets/external-secrets",
+		"docker://ghcr.io/external-secrets/external-secrets",
+	}
+	for _, image := range images {
+		if !IsGhcr(&image) {
+			t.Errorf("Image (%s) was not detected as located in the Githib code repository", image)
+		}
+	}
+
+	// Check the non-matching cases
+	images = []string{
+		"docker://external-secrets/external-secrets",
+		"external-secrets/external-secrets",
+		"docker://mirror/ghcr.io/external-secrets/external-secrets",
+		"mirror/ghcr.io/external-secrets/external-secrets",
+	}
+	for _, image := range images {
+		if IsGhcr(&image) {
+			t.Errorf("Repository (%s) was detected as located in the Githib code repository", image)
+		}
+	}
+}
