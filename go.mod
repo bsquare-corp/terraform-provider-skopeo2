@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/containers/common v0.55.2
 	github.com/containers/image/v5 v5.26.1
-	github.com/containers/ocicrypt v1.1.7
+	github.com/containers/ocicrypt v1.1.8
 	github.com/containers/storage v1.49.0
 	github.com/docker/docker v24.0.2+incompatible
 	github.com/docker/go-connections v0.4.0
@@ -48,6 +48,7 @@ require (
 	github.com/docker/docker-credential-helpers v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/fatih/color v1.15.0 // indirect
+	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
 	github.com/go-openapi/analysis v0.21.4 // indirect
 	github.com/go-openapi/errors v0.20.3 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
@@ -154,7 +155,6 @@ require (
 	google.golang.org/grpc v1.56.2 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/go-jose/go-jose.v2 v2.6.1 // indirect
-	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
