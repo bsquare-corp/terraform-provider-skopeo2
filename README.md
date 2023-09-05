@@ -49,7 +49,7 @@ Then commit the changes to `go.mod` and `go.sum`.
 ## Using the provider
 
 The provider terraform-provider-skopeo2 will need to be copied from `$GOPATH/bin` to your plugins directory, 
-normally here `~/.terraform.d/plugins/terraform.bsquare.com/bsquare-corp/skopeo2/0.0.10/linux_amd64/terraform-provider-skopeo2`
+normally here `~/.terraform.d/plugins/terraform.bsquare.com/bsquare-corp/skopeo2/1.0.0/linux_amd64/terraform-provider-skopeo2`
 Then `terraform init` will copy the plugin into the local `.terraform/providers`. Note, if the plugin already exists 
 in the local `.terraform/providers` then it will not be copied and terraform will complain if the binary has changed.
 
