@@ -80,17 +80,21 @@ data "aws_ecr_authorization_token" "dest" {
   provider = aws.dest
 }
 
-resource "skopeo2_copy" "internal-login" {
+provider "skopeo2" {
   source {
-    image          = "docker://000000000000.dkr.ecr.eu-west-1.amazonaws.com/my-image:latest"
     login_username = data.aws_ecr_authorization_token.source.user_name
     login_password = data.aws_ecr_authorization_token.source.password
   }
   destination {
-    image          = "docker://111111111111.dkr.ecr.us-west-2.amazonaws.com/my-image:latest"
     login_username = data.aws_ecr_authorization_token.dest.user_name
     login_password = data.aws_ecr_authorization_token.dest.password
   }
+}
+
+resource "skopeo2_copy" "internal-login" {
+  source_image      = "docker://000000000000.dkr.ecr.eu-west-1.amazonaws.com/my-image:latest"
+  destination_image = "docker://111111111111.dkr.ecr.us-west-2.amazonaws.com/my-image:latest"
+
   insecure         = false
   preserve_digests = true
   retries          = 3

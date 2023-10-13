@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -19,6 +18,23 @@ func New(version string) func() *schema.Provider {
 			ResourcesMap: map[string]*schema.Resource{
 				"skopeo2_copy": resourceSkopeo2Copy(),
 			},
+			Schema: map[string]*schema.Schema{
+				"source": {
+					Type:        schema.TypeList,
+					Optional:    true,
+					MaxItems:    1,
+					Description: "Source image access credentials",
+					Elem:        &schema.Resource{Schema: SomewhereSchema("source", false)},
+				},
+				"destination": {
+					Type:        schema.TypeList,
+					Optional:    true,
+					MaxItems:    1,
+					ForceNew:    true,
+					Description: "Destination image access credentials",
+					Elem:        &schema.Resource{Schema: SomewhereSchema("destination", false)},
+				},
+			},
 		}
 
 		p.ConfigureContextFunc = configure(version, p)
@@ -27,13 +43,26 @@ func New(version string) func() *schema.Provider {
 	}
 }
 
-type apiClient struct {
-	// Empty, because there is no API associated with this provider.
-	// It operates solely using the containers/image library, which may suggest that it should not be a provider at all.
+type PConfig struct {
+	// Source/dest params can be overridden in the copy resource
+	source, destination *somewhere
 }
 
 func configure(version string, p *schema.Provider) func(context.Context, *schema.ResourceData) (any, diag.Diagnostics) {
-	return func(context.Context, *schema.ResourceData) (any, diag.Diagnostics) {
-		return &apiClient{}, nil
+	return func(ctx context.Context, d *schema.ResourceData) (any, diag.Diagnostics) {
+		src, err := GetSomewhereParams(d, "source")
+		if err != nil {
+			return nil, diag.FromErr(err)
+		}
+
+		dst, err := GetSomewhereParams(d, "destination")
+		if err != nil {
+			return nil, diag.FromErr(err)
+		}
+
+		return &PConfig{
+			source:      src,
+			destination: dst,
+		}, nil
 	}
 }
