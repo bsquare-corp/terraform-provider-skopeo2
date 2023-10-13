@@ -21,7 +21,7 @@ This provider has been [published on the Terraform Registry](https://www.terrafo
 ## Requirements
 
 -	[Terraform](https://www.terraform.io/downloads.html) >= 0.13.x
--	[Go](https://golang.org/doc/install) >= 1.18
+-	[Go](https://golang.org/doc/install) >= 1.19
 
 ## Building The Provider
 

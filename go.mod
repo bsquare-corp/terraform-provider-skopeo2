@@ -1,6 +1,6 @@
 module github.com/bsquare-corp/terraform-provider-skopeo2
 
-go 1.18
+go 1.19
 
 require (
 	github.com/containers/common v0.56.0
