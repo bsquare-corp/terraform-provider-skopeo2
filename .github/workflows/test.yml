@@ -24,7 +24,7 @@ jobs:
     steps:
 
     - name: Check out code into the Go module directory
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Install libbtrfs-dev, libgpgme-dev, libdevmapper-dev
       run: |
@@ -49,7 +49,7 @@ jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install libbtrfs-dev, libgpgme-dev, libdevmapper-dev
         run: |
           sudo apt-get update
@@ -88,7 +88,7 @@ jobs:
     steps:
 
     - name: Check out code into the Go module directory
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Install libbtrfs-dev, libgpgme-dev, libdevmapper-dev
       run: |
