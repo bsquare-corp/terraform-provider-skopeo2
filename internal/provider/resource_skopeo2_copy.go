@@ -215,10 +215,10 @@ func resourceSkopeo2CopyCreate(ctx context.Context, d *schema.ResourceData, meta
 	src.loginRetriesRemaining = src.loginRetries + 1
 	dst.loginRetriesRemaining = dst.loginRetries + 1
 	for {
-		result, err := src.WithEndpointLogin(ctx, newImageOptions(d), false, func(locked bool) (any, error) {
-			return dst.WithEndpointLogin(ctx, newImageDestOptions(d).ImageOptions, locked, func(_ bool) (any, error) {
+		result, err := src.WithEndpointLogin(ctx, d, false, func(locked bool) (any, error) {
+			return dst.WithEndpointLogin(ctx, d, locked, func(_ bool) (any, error) {
 				tflog.Debug(ctx, "Copying", map[string]any{"src-image": src.image, "image": dst.image})
-				result, err := skopeo.Copy(ctx, src.image, dst.image, newCopyOptions(d, reportWriter))
+				result, err := skopeo.Copy(ctx, src.image, dst.image, newCopyOptions(d, reportWriter, src, dst))
 				if err != nil {
 					tflog.Info(ctx, "Copy failed", map[string]any{"src-image": src.image, "image": dst.image, "err": err})
 					return nil, err
@@ -244,30 +244,29 @@ func resourceSkopeo2CopyCreate(ctx context.Context, d *schema.ResourceData, meta
 }
 
 func loginInspect(ctx context.Context, d *schema.ResourceData, sw *somewhere) (any, error) {
-	return sw.WithEndpointLogin(ctx, newImageOptions(d), false,
-		func(_ bool) (any, error) {
-			tflog.Debug(ctx, "Inspecting", map[string]any{"image": sw.image})
-			result, err := skopeo.Inspect(ctx, sw.image, newInspectOptions(d))
-			if err != nil {
-				tflog.Info(ctx, "Inspection failed", map[string]any{"image": sw.image, "err": err.Error()})
-				//The underlying storage code does not reveal the 404 response code on a missing image.
-				//The only indication that an image is missing is the presence of "manifest unknown" in the error
-				//reported. This comes from the body of the 404 response and is therefore subject to the whim of the
-				//registry implementation.
-				//Azure ACR for example reports:
-				//"manifest unknown: manifest tagged by "X.Y.Z" is not found"
-				//where as AWS ECR reports:
-				//"manifest unknown"
-				//This code is fragile but changes to the underlying library would be needed to improve on it.
-				if errors.Is(err, storage.ErrNoSuchImage) || strings.Contains(err.Error(),
-					"manifest unknown") {
-					return nil, nil
-				}
-				return nil, err
+	return sw.WithEndpointLogin(ctx, d, false, func(_ bool) (any, error) {
+		tflog.Debug(ctx, "Inspecting", map[string]any{"image": sw.image})
+		result, err := skopeo.Inspect(ctx, sw.image, newInspectOptions(d, sw))
+		if err != nil {
+			tflog.Info(ctx, "Inspection failed", map[string]any{"image": sw.image, "err": err.Error()})
+			//The underlying storage code does not reveal the 404 response code on a missing image.
+			//The only indication that an image is missing is the presence of "manifest unknown" in the error
+			//reported. This comes from the body of the 404 response and is therefore subject to the whim of the
+			//registry implementation.
+			//Azure ACR for example reports:
+			//"manifest unknown: manifest tagged by "X.Y.Z" is not found"
+			//where as AWS ECR reports:
+			//"manifest unknown"
+			//This code is fragile but changes to the underlying library would be needed to improve on it.
+			if errors.Is(err, storage.ErrNoSuchImage) || strings.Contains(err.Error(),
+				"manifest unknown") {
+				return nil, nil
 			}
+			return nil, err
+		}
 
-			return result, nil
-		})
+		return result, nil
+	})
 }
 
 func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
@@ -364,9 +363,9 @@ func resourceSkopeo2CopyDelete(ctx context.Context, d *schema.ResourceData, meta
 	}
 
 	for {
-		_, err := dst.WithEndpointLogin(ctx, newImageOptions(d), false, func(_ bool) (any, error) {
+		_, err := dst.WithEndpointLogin(ctx, d, false, func(_ bool) (any, error) {
 			tflog.Debug(ctx, "Deleting", map[string]any{"image": dst.image})
-			err := skopeoPkg.Delete(ctx, dst.image, newDeleteOptions(d))
+			err := skopeoPkg.Delete(ctx, dst.image, newDeleteOptions(d, dst))
 			if err != nil {
 				tflog.Info(ctx, "Delete fail", map[string]any{"image": dst.image, "err": err})
 				return nil, err

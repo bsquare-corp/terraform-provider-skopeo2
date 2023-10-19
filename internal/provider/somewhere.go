@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/bsquare-corp/terraform-provider-skopeo2/internal/providerlog"
 	"github.com/bsquare-corp/terraform-provider-skopeo2/internal/skopeo"
-	skopeoPkg "github.com/bsquare-corp/terraform-provider-skopeo2/pkg/skopeo"
 	"github.com/go-cmd/cmd"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"log"
@@ -28,6 +27,8 @@ const (
 	defaultLoginScript      = "true"
 	defaultWorkingDirectory = "."
 	defaultLoginRetries     = 0
+	defaultCertDir          = ""
+	defaultRegistryAuthFile = ""
 )
 
 func subRes(prefix, res string) string {
@@ -55,6 +56,17 @@ func SomewhereSchema(parent string, scriptOptions bool) map[string]*schema.Schem
 		Optional:     true,
 		Description:  "Registry login password",
 		RequiredWith: subResArray(parent, "login_username"),
+	}
+	s["certificate_directory"] = &schema.Schema{
+		Type:        schema.TypeString,
+		Optional:    true,
+		Description: "Use certificates at the specified path (*.crt, *.cert, *.key) to access the registry",
+	}
+	s["registry_auth_file"] = &schema.Schema{
+		Type:     schema.TypeString,
+		Optional: true,
+		Description: "Path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override. " +
+			"Default is ${XDG_RUNTIME_DIR}/containers/auth.json",
 	}
 	if scriptOptions {
 		s["login_username"].ConflictsWith = subResArray(parent, "login_script")
@@ -118,26 +130,30 @@ func SomewhereSchema(parent string, scriptOptions bool) map[string]*schema.Schem
 
 // We copy from *somewhere* to *somewhere*
 type somewhere struct {
-	image                 string
-	hasImage              bool
-	loginScript           string
-	hasLoginScript        bool
-	loginRetries          int
-	hasLoginRetries       bool
-	loginEnv              []string
-	hasLoginEnv           bool
-	loginInterpreter      []string
-	hasLoginInterpreter   bool
-	loginRetriesRemaining int
-	workingDirectory      string
-	hasWorkingDirectory   bool
-	loginUsername         string
-	loginPassword         string
-	loginPasswordScript   string
-	unPwLogin             bool
-	pwScript              bool
-	cmdTimeout            time.Duration
-	hasTimeout            bool
+	image                   string
+	hasImage                bool
+	loginScript             string
+	hasLoginScript          bool
+	loginRetries            int
+	hasLoginRetries         bool
+	loginEnv                []string
+	hasLoginEnv             bool
+	loginInterpreter        []string
+	hasLoginInterpreter     bool
+	loginRetriesRemaining   int
+	workingDirectory        string
+	hasWorkingDirectory     bool
+	loginUsername           string
+	loginPassword           string
+	loginPasswordScript     string
+	unPwLogin               bool
+	pwScript                bool
+	cmdTimeout              time.Duration
+	hasTimeout              bool
+	hasCertificateDirectory bool
+	certificateDirectory    string
+	hasRegistryAuthFile     bool
+	registryAuthFile        string
 }
 
 // Overriding Update this _somewhere_ object with elements from the provider block _somewhere_ object where this
@@ -184,6 +200,16 @@ func (sw *somewhere) Overriding(other *somewhere) {
 	if !sw.hasTimeout {
 		sw.hasTimeout = other.hasTimeout
 		sw.cmdTimeout = other.cmdTimeout
+	}
+
+	if !sw.hasCertificateDirectory {
+		sw.certificateDirectory = other.certificateDirectory
+		sw.hasCertificateDirectory = other.hasCertificateDirectory
+	}
+
+	if !sw.hasRegistryAuthFile {
+		sw.registryAuthFile = other.registryAuthFile
+		sw.hasRegistryAuthFile = other.hasRegistryAuthFile
 	}
 }
 
@@ -263,11 +289,22 @@ func GetSomewhereParams(d *schema.ResourceData, key string) (*somewhere, error) 
 		sw.cmdTimeout = time.Duration(defaultTimeout) * time.Second
 	}
 
+	if attribute, sw.hasCertificateDirectory = getOkSubRes("certificate_directory"); sw.hasCertificateDirectory {
+		sw.certificateDirectory = attribute.(string)
+	} else {
+		sw.certificateDirectory = defaultCertDir
+	}
+
+	if attribute, sw.hasRegistryAuthFile = getOkSubRes("registry_auth_file"); sw.hasRegistryAuthFile {
+		sw.registryAuthFile = attribute.(string)
+	} else {
+		sw.registryAuthFile = defaultRegistryAuthFile
+	}
+
 	return &sw, nil
 }
 
-func (sw *somewhere) WithEndpointLogin(ctx context.Context, imageOptions *skopeoPkg.ImageOptions, locked bool, op func(locked bool) (any,
-	error)) (any, error) {
+func (sw *somewhere) WithEndpointLogin(ctx context.Context, d *schema.ResourceData, locked bool, op func(locked bool) (any, error)) (any, error) {
 
 	//Try the operation without logging in first, as the credentials may already be in place
 	result, err := op(locked)
@@ -300,7 +337,7 @@ func (sw *somewhere) WithEndpointLogin(ctx context.Context, imageOptions *skopeo
 	}
 
 	//Didn't succeed so login
-	err = sw.DoLogin(ctx, imageOptions)
+	err = sw.DoLogin(ctx, d)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +346,7 @@ func (sw *somewhere) WithEndpointLogin(ctx context.Context, imageOptions *skopeo
 	return op(true)
 }
 
-func (sw *somewhere) DoLogin(ctx context.Context, imageOptions *skopeoPkg.ImageOptions) error {
+func (sw *somewhere) DoLogin(ctx context.Context, d *schema.ResourceData) error {
 	var err error
 	if sw.unPwLogin {
 		var password = sw.loginPassword
@@ -322,30 +359,24 @@ func (sw *somewhere) DoLogin(ctx context.Context, imageOptions *skopeoPkg.ImageO
 		}
 		tflog.Info(ctx, "Login using username and password", map[string]any{"image": sw.image,
 			"username": sw.loginUsername})
-		return sw.doUnPwLogin(ctx, password, imageOptions)
+		return sw.doUnPwLogin(ctx, password, d)
 	}
 	tflog.Info(ctx, "Login using script", map[string]any{"image": sw.image})
 	_, err = sw.RunLoginPasswordScript(ctx, sw.loginScript)
 	return err
 }
 
-func (sw *somewhere) doUnPwLogin(ctx context.Context, password string, imageOptions *skopeoPkg.ImageOptions) error {
+func (sw *somewhere) doUnPwLogin(ctx context.Context, password string, d *schema.ResourceData) error {
 
 	var err error
 
-	opts := &skopeo.LoginOptions{
-		Image:    imageOptions,
-		Username: sw.loginUsername,
-		Password: password,
-	}
-
-	opts.Stdout = providerlog.NewProviderLogWriter(
+	logWriter := providerlog.NewProviderLogWriter(
 		log.Default().Writer(),
 	)
-	defer opts.Stdout.(*providerlog.ProviderLogWriter).Close()
+	defer logWriter.Close()
 
 	tflog.Debug(ctx, "Logging in", map[string]any{"image": sw.image, "user": sw.loginUsername})
-	err = skopeo.Login(ctx, sw.image, opts)
+	err = skopeo.Login(ctx, sw.image, newLoginOptions(d, sw, logWriter, password))
 
 	if err != nil {
 		tflog.Info(ctx, "Login fail", map[string]any{"image": sw.image, "user": sw.loginUsername, "err": err})

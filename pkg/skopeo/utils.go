@@ -36,7 +36,7 @@ type DockerImageOptions struct {
 	userName       string              // username for accessing a registry
 	password       string              // password for accessing a registry
 	registryToken  string              // token to be used directly as a Bearer token when accessing the registry
-	dockerCertPath string              // A directory using Docker-like *.{crt,cert,key} files for connecting to a registry or a daemon
+	DockerCertPath string              // A directory using Docker-like *.{crt,cert,key} files for connecting to a registry or a daemon
 	noCreds        bool                // Access the registry anonymously
 }
 
@@ -54,7 +54,7 @@ func (opts *ImageOptions) NewSystemContext() (*types.SystemContext, error) {
 	// *types.SystemContext instance from globalOptions
 	//  imageOptions option overrides the instance if both are present.
 	ctx := opts.Global.newSystemContext()
-	ctx.DockerCertPath = opts.dockerCertPath
+	ctx.DockerCertPath = opts.DockerCertPath
 	if opts.Insecure {
 		ctx.DockerInsecureSkipTLSVerify = types.OptionalBoolTrue
 	} else {
@@ -63,7 +63,7 @@ func (opts *ImageOptions) NewSystemContext() (*types.SystemContext, error) {
 	ctx.OCISharedBlobDirPath = opts.sharedBlobDir
 	ctx.AuthFilePath = opts.Shared.authFilePath
 	ctx.DockerDaemonHost = opts.dockerDaemonHost
-	ctx.DockerDaemonCertPath = opts.dockerCertPath
+	ctx.DockerDaemonCertPath = opts.DockerCertPath
 	if opts.DockerImageOptions.AuthFilePath != "" {
 		ctx.AuthFilePath = opts.DockerImageOptions.AuthFilePath
 	}

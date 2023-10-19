@@ -6,14 +6,18 @@ import (
 	skopeoPkg "github.com/bsquare-corp/terraform-provider-skopeo2/pkg/skopeo"
 	"github.com/containers/common/pkg/auth"
 	"github.com/containers/common/pkg/retry"
+	"github.com/go-cmd/cmd"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"regexp"
 	"testing"
+	"time"
 )
 
 const (
@@ -220,6 +224,7 @@ func TestAccResourceSkopeo2Login(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.testimage_login_source_%s", rName),
 						"docker_digest"),
+					CheckImageInRegistry(fmt.Sprintf("docker://127.0.0.1:9016/login-unpw-script-source-%s", rName)),
 				),
 			},
 
@@ -229,6 +234,7 @@ func TestAccResourceSkopeo2Login(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.testimage_login_source_2_%s", rName),
 						"docker_digest"),
+					CheckImageInRegistry(fmt.Sprintf("docker://127.0.0.1:9016/login-us-west-1-source-%s", rName)),
 				),
 			},
 
@@ -238,6 +244,7 @@ func TestAccResourceSkopeo2Login(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.testimage_login_source_retry_%s", rName),
 						"docker_digest"),
+					CheckImageInRegistry(fmt.Sprintf("docker://127.0.0.1:9016/login-source-retry-%s", rName)),
 				),
 			},
 
@@ -245,12 +252,79 @@ func TestAccResourceSkopeo2Login(t *testing.T) {
 				PreConfig: logoutAll(),
 				Config:    testAccCopyResource_loginSourceWithPassword(rName),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.testimage_login_source_%s", rName),
+					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.testimage_login_source_with_password_%s", rName),
 						"docker_digest"),
+					CheckImageInRegistry(fmt.Sprintf("docker://127.0.0.1:9016/login-source-with-password-%s", rName)),
+				),
+			},
+			{
+				PreConfig: logoutAll(),
+				Config:    testAccCopyResource_loginSourceWithPasswordAndAuthfile(rName),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.testimage_login_source_with_password_and_authfile_%s", rName),
+						"docker_digest"),
+					CheckImageInRegistry(fmt.Sprintf("docker://127.0.0.1:9016/login-source-with-password-and-authfile-%s", rName)),
 				),
 			},
 		},
 	})
+}
+
+func CheckImageInRegistry(imageName string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		ctx := context.Background()
+		imageOpts := skopeoPkg.ImageOptions{
+			DockerImageOptions: skopeoPkg.DockerImageOptions{
+				Global:       &skopeoPkg.GlobalOptions{},
+				Shared:       &skopeoPkg.SharedImageOptions{},
+				AuthFilePath: auth.GetDefaultAuthFile(),
+				Insecure:     true,
+			},
+		}
+		src, err := skopeoPkg.ParseImageSource(ctx, &imageOpts, imageName)
+		if err != nil {
+			return err
+		}
+		defer src.Close()
+
+		_, _, err = src.GetManifest(ctx, nil)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+func dockerLogout(registry string) {
+	ctx := context.Background()
+	loginCmd := cmd.NewCmdOptions(cmd.Options{Buffered: true}, "docker", "logout", registry)
+	loginCmd.Env = os.Environ()
+	loginCmd.Dir = "."
+
+	statusChan := loginCmd.Start()
+
+	go func() {
+		<-time.After(time.Duration(defaultTimeout) * time.Second)
+		err := loginCmd.Stop()
+		if err != nil {
+			tflog.Info(ctx, "Logout script failed to be stopped after timeout")
+		}
+	}()
+
+	result := <-statusChan
+	if !result.Complete {
+		tflog.Warn(ctx, "Logout timed out or was signalled")
+		return
+	}
+	if result.Error != nil {
+		tflog.Info(ctx, "Logout failed", map[string]any{"err": result.Error})
+		return
+	}
+	if result.Exit != 0 {
+		tflog.Info(ctx, "Logout returned non-zero exit status", map[string]any{"status": result.Exit})
+		return
+	}
+	tflog.Info(ctx, result.Stdout[0])
 }
 
 // func Logout(systemContext *types.SystemContext, opts *LogoutOptions, args []string) error {
@@ -260,7 +334,7 @@ func logoutAll() func() {
 			DockerImageOptions: skopeoPkg.DockerImageOptions{
 				Global:       &skopeoPkg.GlobalOptions{},
 				Shared:       &skopeoPkg.SharedImageOptions{},
-				AuthFilePath: os.Getenv("REGISTRY_AUTH_FILE"),
+				AuthFilePath: auth.GetDefaultAuthFile(),
 				Insecure:     true,
 			},
 		}
@@ -273,6 +347,21 @@ func logoutAll() func() {
 		if err != nil {
 			return
 		}
+
+		imageOpts.DockerImageOptions.AuthFilePath = "/tmp/auth.json"
+
+		sysCtx, err = imageOpts.NewSystemContext()
+		if err != nil {
+			return
+		}
+
+		err = auth.Logout(sysCtx, &auth.LogoutOptions{All: true, Stdout: os.Stdout}, nil)
+		if err != nil {
+			return
+		}
+
+		dockerLogout("127.0.0.1:9017")
+		dockerLogout("127.0.0.1:9018")
 	}
 }
 
@@ -353,9 +442,27 @@ provider "skopeo2" {
     }
 }
 
-resource "skopeo2_copy" "testimage_login_source_%s" {
+resource "skopeo2_copy" "testimage_login_source_with_password_%s" {
     source_image = "%s"
     destination_image = "docker://127.0.0.1:9016/login-source-with-password-%s"
+    insecure = true
+}
+`, name, testSrcImageWithAuth, name)
+}
+
+func testAccCopyResource_loginSourceWithPasswordAndAuthfile(name string) string {
+	return fmt.Sprintf(`
+provider "skopeo2" {
+    source {
+		login_username = "testuser"
+		login_password = "testpassword"
+		registry_auth_file = "/tmp/auth.json"
+    }
+}
+
+resource "skopeo2_copy" "testimage_login_source_with_password_and_authfile_%s" {
+    source_image = "%s"
+    destination_image = "docker://127.0.0.1:9016/login-source-with-password-and-authfile-%s"
     insecure = true
 }
 `, name, testSrcImageWithAuth, name)

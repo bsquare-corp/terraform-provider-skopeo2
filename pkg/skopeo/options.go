@@ -6,7 +6,7 @@ import (
 	"github.com/containers/image/v5/types"
 )
 
-var defaultUserAgent = "terraform-provider-skopeo2/1.0.0"
+var defaultUserAgent = "terraform-provider-skopeo2/1.1.0"
 
 type GlobalOptions struct {
 	Debug              bool          // Enable debug output
