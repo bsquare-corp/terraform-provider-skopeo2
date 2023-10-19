@@ -17,7 +17,7 @@ terraform {
   required_providers {
     skopeo2 = {
       source  = "bsquare-corp/skopeo2"
-      version = "~> 1.0.0"
+      version = "~> 1.1.0"
     }
   }
 }
@@ -47,8 +47,10 @@ provider "skopeo2" {
 
 Optional:
 
+- `certificate_directory` (String) Use certificates at the specified path (*.crt, *.cert, *.key) to access the registry
 - `login_password` (String) Registry login password
 - `login_username` (String) Registry login username
+- `registry_auth_file` (String) Path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override. Default is ${XDG_RUNTIME_DIR}/containers/auth.json
 
 
 <a id="nestedblock--source"></a>
@@ -56,5 +58,7 @@ Optional:
 
 Optional:
 
+- `certificate_directory` (String) Use certificates at the specified path (*.crt, *.cert, *.key) to access the registry
 - `login_password` (String) Registry login password
 - `login_username` (String) Registry login username
+- `registry_auth_file` (String) Path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override. Default is ${XDG_RUNTIME_DIR}/containers/auth.json

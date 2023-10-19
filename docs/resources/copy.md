@@ -153,6 +153,7 @@ Supported transports:
 
 Optional:
 
+- `certificate_directory` (String) Use certificates at the specified path (*.crt, *.cert, *.key) to access the registry
 - `image` (String) specified as a "transport":"details" format.
 
 Supported transports:
@@ -165,6 +166,7 @@ When working with GitHub Container registry `keep_image` needs to be set to `tru
 - `login_script` (String) Script to be executed by the login_script_interpreter to authenticate following skopeo operations, default true
 - `login_script_interpreter` (List of String) The interpreter used to execute the login_script/login_password_script, defaults to ["/bin/sh", "-c"]
 - `login_username` (String) Registry login username
+- `registry_auth_file` (String) Path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override. Default is ${XDG_RUNTIME_DIR}/containers/auth.json
 - `timeout` (Number) Timeout for login_script/login_password_script to execute in seconds, default 60
 - `working_directory` (String) The working directory in which to execute the login_script/login_password_script, default .
 
@@ -174,6 +176,7 @@ When working with GitHub Container registry `keep_image` needs to be set to `tru
 
 Optional:
 
+- `certificate_directory` (String) Use certificates at the specified path (*.crt, *.cert, *.key) to access the registry
 - `image` (String) specified as a "transport":"details" format.
 
 Supported transports:
@@ -185,5 +188,6 @@ Supported transports:
 - `login_script` (String) Script to be executed by the login_script_interpreter to authenticate following skopeo operations, default true
 - `login_script_interpreter` (List of String) The interpreter used to execute the login_script/login_password_script, defaults to ["/bin/sh", "-c"]
 - `login_username` (String) Registry login username
+- `registry_auth_file` (String) Path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override. Default is ${XDG_RUNTIME_DIR}/containers/auth.json
 - `timeout` (Number) Timeout for login_script/login_password_script to execute in seconds, default 60
 - `working_directory` (String) The working directory in which to execute the login_script/login_password_script, default .
