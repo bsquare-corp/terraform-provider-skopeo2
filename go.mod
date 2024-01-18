@@ -5,8 +5,8 @@ go 1.21.0
 toolchain go1.22.2
 
 require (
-	github.com/containers/common v0.56.0
-	github.com/containers/image/v5 v5.28.0
+	github.com/containers/common v0.57.2
+	github.com/containers/image/v5 v5.29.1
 	github.com/containers/ocicrypt v1.2.0
 	github.com/containers/storage v1.55.0
 	github.com/docker/docker v27.1.2+incompatible
