@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/pkg/archive"
 	"io"
 	"io/ioutil"
@@ -21,6 +22,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	registrytypes "github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
@@ -94,7 +96,7 @@ func newDockerCli(ctx context.Context) *client.Client {
 func ListContainer() error {
 	cli := newDockerCli(context.Background())
 
-	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{})
+	containers, err := cli.ContainerList(context.Background(), container.ListOptions{})
 	if err != nil {
 		log.Printf("Unable to list containers: %v", err)
 		return err
@@ -119,7 +121,7 @@ func StartLocalRegistry(hostPort string, htpasswd string) (string, error) {
 
 	cli := newDockerCli(context.Background())
 
-	resp, err := cli.ImagePull(context.Background(), "registry:2", types.ImagePullOptions{})
+	resp, err := cli.ImagePull(context.Background(), "registry:2", image.PullOptions{})
 	if err != nil {
 		log.Println("Unable to pull")
 		return "", err
@@ -168,7 +170,7 @@ func StartLocalRegistry(hostPort string, htpasswd string) (string, error) {
 		return "", err
 	}
 
-	err = cli.ContainerStart(context.Background(), cont.ID, types.ContainerStartOptions{})
+	err = cli.ContainerStart(context.Background(), cont.ID, container.StartOptions{})
 	if err != nil {
 		log.Println("ContainerStart failed")
 		return "", err
@@ -283,7 +285,7 @@ func printDetails(rd io.Reader) error {
 	return nil
 }
 
-var authConfig = types.AuthConfig{
+var authConfig = registrytypes.AuthConfig{
 	Username:      "testuser",
 	Password:      "testpassword",
 	ServerAddress: "http://" + dockerRegistryUserID + "/v1/",
@@ -297,7 +299,7 @@ func imagePush(dockerClient *client.Client) error {
 	authConfigEncoded := base64.URLEncoding.EncodeToString(authConfigBytes)
 
 	tag := dockerRegistryUserID + "/test-image"
-	opts := types.ImagePushOptions{RegistryAuth: authConfigEncoded}
+	opts := image.PushOptions{RegistryAuth: authConfigEncoded}
 	rd, err := dockerClient.ImagePush(ctx, tag, opts)
 	if err != nil {
 		return err
