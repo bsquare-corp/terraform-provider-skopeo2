@@ -1,5 +1,10 @@
 # Terraform Provider skopeo2 (Terraform Plugin SDK)
 
+![Release](https://img.shields.io/github/release/bsquare-corp/terraform-provider-skopeo2.svg)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/bsquare-corp/terraform-provider-skopeo2/test.yml)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/bsquare-corp/terraform-provider-skopeo2/total)
+![GitHub top language](https://img.shields.io/github/languages/top/bsquare-corp/terraform-provider-skopeo2)
+
 Reference to earlier provider https://registry.terraform.io/providers/abergmeier/skopeo written by
 abergmeier that this project is based on.
 
