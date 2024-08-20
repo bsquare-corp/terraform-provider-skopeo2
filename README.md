@@ -68,3 +68,11 @@ In order to run the full suite of Acceptance tests, run `make testacc`.
 ```sh
 $ make testacc
 ```
+
+## Referencing Custom containers/image/v5 Dependency
+
+Skopeo2 provider is built on a custom version of the containers/image code here: https://github.com/bsquare-corp/image/tree/creds-store-fix
+In order to replace references to `containers/image/v5` the following command adds (or updates) a `replace` directive in the `go.mod` file:
+```sh
+$ go mod edit -replace github.com/containers/image/v5=github.com/bsquare-corp/image/v5@creds-store-fix
+```
