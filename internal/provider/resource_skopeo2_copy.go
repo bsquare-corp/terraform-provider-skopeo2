@@ -17,6 +17,7 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var (
@@ -156,6 +157,12 @@ func resourceSkopeo2Copy() *schema.Resource {
 				Computed:    true,
 				Description: "digest string for the destination image.",
 			},
+		},
+		Timeouts: &schema.ResourceTimeout{
+			Create: schema.DefaultTimeout(20 * time.Minute),
+			Read:   schema.DefaultTimeout(20 * time.Minute),
+			Update: schema.DefaultTimeout(20 * time.Minute),
+			Delete: schema.DefaultTimeout(20 * time.Minute),
 		},
 	}
 }
