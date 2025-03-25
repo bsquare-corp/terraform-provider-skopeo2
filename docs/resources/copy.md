@@ -143,6 +143,7 @@ When working with GitHub Container registry `keep_image` needs to be set to `tru
 
 Supported transports:
 `containers-storage`, `dir`, `docker`, `docker-archive`, `docker-daemon`, `oci`, `oci-archive`, `ostree`, `sif`, `tarball`
+- `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
 
@@ -191,3 +192,14 @@ Supported transports:
 - `registry_auth_file` (String) Path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override. Default is ${XDG_RUNTIME_DIR}/containers/auth.json
 - `timeout` (Number) Timeout for login_script/login_password_script to execute in seconds, default 60
 - `working_directory` (String) The working directory in which to execute the login_script/login_password_script, default .
+
+
+<a id="nestedblock--timeouts"></a>
+### Nested Schema for `timeouts`
+
+Optional:
+
+- `create` (String)
+- `delete` (String)
+- `read` (String)
+- `update` (String)
