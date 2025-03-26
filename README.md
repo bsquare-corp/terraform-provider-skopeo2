@@ -8,6 +8,8 @@
 Reference to earlier provider https://registry.terraform.io/providers/abergmeier/skopeo written by
 abergmeier that this project is based on.
 
+*TERRAFORM REGISTRY PUBLISH PROBLEM - THE RELEASE WEBHOOK THAT INFORMS TF REG OF A NEW VERSION IS CALLED BEFORE THE ACTION COMPLETES BUILDING THE ARTIFACTS. DO A PRERELEASE FIRST AND THEN WHEN THE ARTIFACTS ARE AVAILABLE SWITCH IT TO THE LATEST RELEASE*
+
 _This repository is built on the [Terraform Plugin SDK](https://github.com/hashicorp/terraform-plugin-sdk) template. The template repository built on the [Terraform Plugin Framework](https://github.com/hashicorp/terraform-plugin-framework) can be found at [terraform-provider-skopeo2-framework](https://github.com/bsquare-corp/terraform-provider-skopeo2-framework). See [Which SDK Should I Use?](https://www.terraform.io/docs/plugin/which-sdk.html) in the Terraform documentation for additional information._
 
 This repository is a [Terraform](https://www.terraform.io) provider. It contains:
