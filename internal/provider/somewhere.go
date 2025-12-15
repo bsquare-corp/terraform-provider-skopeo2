@@ -3,10 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"github.com/bsquare-corp/terraform-provider-skopeo2/internal/providerlog"
-	"github.com/bsquare-corp/terraform-provider-skopeo2/internal/skopeo"
-	"github.com/go-cmd/cmd"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"log"
 	"os"
 	"os/exec"
@@ -14,6 +10,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/bsquare-corp/terraform-provider-skopeo2/internal/providerlog"
+	"github.com/bsquare-corp/terraform-provider-skopeo2/internal/skopeo"
+	"github.com/go-cmd/cmd"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -89,7 +90,7 @@ func SomewhereSchema(parent string, scriptOptions bool) map[string]*schema.Schem
 		s["login_retries"] = &schema.Schema{
 			Type:     schema.TypeInt,
 			Optional: true,
-			Description: "Either if the login_script/login_password_script reports failure with non-exit code, " +
+			Description: "Either if the login_script/login_password_script reports failure with non-zero exit code, " +
 				"or if following successful login the copy operation fails, " +
 				"retry this number of times. Default " + strconv.Itoa(defaultLoginRetries),
 			ConflictsWith: subResArray(parent, "login_password"),

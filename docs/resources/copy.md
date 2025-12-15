@@ -163,7 +163,7 @@ When working with GitHub Container registry `keep_image` needs to be set to `tru
 - `login_environment` (Map of String) Map of environment variables passed to the login_script/login_password_script
 - `login_password` (String) Registry login password
 - `login_password_script` (String) Script to be executed to obtain the registry login password to be used to skopeo login. Password returned on STDOUT by the script.
-- `login_retries` (Number) Either if the login_script/login_password_script reports failure with non-exit code, or if following successful login the copy operation fails, retry this number of times. Default 0
+- `login_retries` (Number) Either if the login_script/login_password_script reports failure with non-zero exit code, or if following successful login the copy operation fails, retry this number of times. Default 0
 - `login_script` (String) Script to be executed by the login_script_interpreter to authenticate following skopeo operations, default true
 - `login_script_interpreter` (List of String) The interpreter used to execute the login_script/login_password_script, defaults to ["/bin/sh", "-c"]
 - `login_username` (String) Registry login username
@@ -185,7 +185,7 @@ Supported transports:
 - `login_environment` (Map of String) Map of environment variables passed to the login_script/login_password_script
 - `login_password` (String) Registry login password
 - `login_password_script` (String) Script to be executed to obtain the registry login password to be used to skopeo login. Password returned on STDOUT by the script.
-- `login_retries` (Number) Either if the login_script/login_password_script reports failure with non-exit code, or if following successful login the copy operation fails, retry this number of times. Default 0
+- `login_retries` (Number) Either if the login_script/login_password_script reports failure with non-zero exit code, or if following successful login the copy operation fails, retry this number of times. Default 0
 - `login_script` (String) Script to be executed by the login_script_interpreter to authenticate following skopeo operations, default true
 - `login_script_interpreter` (List of String) The interpreter used to execute the login_script/login_password_script, defaults to ["/bin/sh", "-c"]
 - `login_username` (String) Registry login username
