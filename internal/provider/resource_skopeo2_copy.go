@@ -4,6 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"regexp"
+	"strings"
+	"time"
+
 	"github.com/bsquare-corp/terraform-provider-skopeo2/internal/providerlog"
 	"github.com/bsquare-corp/terraform-provider-skopeo2/internal/skopeo"
 	skopeoPkg "github.com/bsquare-corp/terraform-provider-skopeo2/pkg/skopeo"
@@ -13,11 +18,8 @@ import (
 	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/customdiff"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"log"
-	"regexp"
-	"strings"
-	"time"
 )
 
 var (
@@ -45,6 +47,7 @@ func resourceSkopeo2Copy() *schema.Resource {
 		ReadContext:   resourceSkopeo2CopyRead,
 		UpdateContext: resourceSkopeo2CopyUpdate,
 		DeleteContext: resourceSkopeo2CopyDelete,
+		CustomizeDiff: resourceSkopeo2CopyDiffFunc(),
 
 		Schema: map[string]*schema.Schema{
 			"source": {
@@ -157,6 +160,11 @@ func resourceSkopeo2Copy() *schema.Resource {
 				Computed:    true,
 				Description: "digest string for the destination image.",
 			},
+			"source_digest": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "digest string of the source image.",
+			},
 		},
 		Timeouts: &schema.ResourceTimeout{
 			Create: schema.DefaultTimeout(20 * time.Minute),
@@ -223,6 +231,20 @@ func resourceSkopeo2CopyCreate(ctx context.Context, d *schema.ResourceData, meta
 	dst.loginRetriesRemaining = dst.loginRetries + 1
 	for {
 		result, err := src.WithEndpointLogin(ctx, d, false, func(locked bool) (any, error) {
+			// inspect the source image and obtain its digest
+			tflog.Debug(ctx, "Inspecting Source", map[string]any{"image": src.image})
+			inspectResult, err := skopeo.Inspect(ctx, src.image, newInspectOptions(d, src))
+			if err != nil {
+				tflog.Info(ctx, "Source Inspection failed",
+					map[string]any{"image": src.image, "err": err.Error(), "missing": isMissingInspectError(err)})
+				return nil, err
+			}
+			err = d.Set("source_digest", inspectResult.Digest)
+			if err != nil {
+				return nil, err
+			}
+
+			// return the results of the copy to the dest image
 			return dst.WithEndpointLogin(ctx, d, locked, func(_ bool) (any, error) {
 				tflog.Debug(ctx, "Copying", map[string]any{"src-image": src.image, "image": dst.image})
 				result, err := skopeo.Copy(ctx, src.image, dst.image, newCopyOptions(d, reportWriter, src, dst))
@@ -250,23 +272,29 @@ func resourceSkopeo2CopyCreate(ctx context.Context, d *schema.ResourceData, meta
 	}
 }
 
+// isMissingInspectError examines the error from the inspect call to determine if the reason
+// was because the image does not exist
+func isMissingInspectError(inspectErr error) bool {
+	//The underlying storage code does not reveal the 404 response code on a missing image.
+	//The only indication that an image is missing is the presence of "manifest unknown" in the error
+	//reported. This comes from the body of the 404 response and is therefore subject to the whim of the
+	//registry implementation.
+	//Azure ACR for example reports:
+	//"manifest unknown: manifest tagged by "X.Y.Z" is not found"
+	//where as AWS ECR reports:
+	//"manifest unknown"
+	//This code is fragile but changes to the underlying library would be needed to improve on it.
+	return errors.Is(inspectErr, storage.ErrNoSuchImage) || strings.Contains(inspectErr.Error(), "manifest unknown")
+}
+
 func loginInspect(ctx context.Context, d *schema.ResourceData, sw *somewhere) (any, error) {
 	return sw.WithEndpointLogin(ctx, d, false, func(_ bool) (any, error) {
 		tflog.Debug(ctx, "Inspecting", map[string]any{"image": sw.image})
 		result, err := skopeo.Inspect(ctx, sw.image, newInspectOptions(d, sw))
 		if err != nil {
-			tflog.Info(ctx, "Inspection failed", map[string]any{"image": sw.image, "err": err.Error()})
-			//The underlying storage code does not reveal the 404 response code on a missing image.
-			//The only indication that an image is missing is the presence of "manifest unknown" in the error
-			//reported. This comes from the body of the 404 response and is therefore subject to the whim of the
-			//registry implementation.
-			//Azure ACR for example reports:
-			//"manifest unknown: manifest tagged by "X.Y.Z" is not found"
-			//where as AWS ECR reports:
-			//"manifest unknown"
-			//This code is fragile but changes to the underlying library would be needed to improve on it.
-			if errors.Is(err, storage.ErrNoSuchImage) || strings.Contains(err.Error(),
-				"manifest unknown") {
+			missing := isMissingInspectError(err)
+			tflog.Info(ctx, "Inspection failed", map[string]any{"image": sw.image, "err": err.Error(), "missing": missing})
+			if missing {
 				return nil, nil
 			}
 			return nil, err
@@ -282,6 +310,7 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 	if err != nil {
 		return diag.FromErr(err)
 	}
+	var diagnosticsOut []diag.Diagnostic
 
 	dst.loginRetriesRemaining = dst.loginRetries + 1
 
@@ -292,16 +321,12 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 			if result == nil {
 				// Destination image does not exist
 				d.SetId("")
-				return nil
-			}
-			// if we are detecting changes to the source image break out here and continue on to inspecting the
-			// source image
-			if d.Get("preserve_digests").(bool) {
 				break
 			}
 			dstDigest := result.(*skopeo.InspectOutput).Digest
 			tflog.Info(ctx, "Inspection", map[string]any{"image": dst.image, "digest": dstDigest})
-			return diag.FromErr(d.Set("docker_digest", dstDigest))
+			diagnosticsOut = append(diagnosticsOut, diag.FromErr(d.Set("docker_digest", dstDigest))...)
+			break
 		}
 
 		tflog.Info(ctx, "Retries remaining", map[string]any{"count": dst.loginRetriesRemaining})
@@ -310,7 +335,6 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 			// report the resource as deleted forcing the create copy operation.
 			tflog.Warn(ctx, "Login errors during refresh, plan to recreate", map[string]any{"error": err.Error()})
 			d.SetId("")
-			return nil
 		}
 	}
 
@@ -328,12 +352,13 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 			if result == nil {
 				// Source image does not exist
 				d.SetId("")
-				return nil
+				break
 			}
 
 			srcDigest := result.(*skopeo.InspectOutput).Digest
 			tflog.Info(ctx, "Inspection", map[string]any{"image": src.image, "digest": srcDigest})
-			return diag.FromErr(d.Set("docker_digest", srcDigest))
+			diagnosticsOut = append(diagnosticsOut, diag.FromErr(d.Set("source_digest", srcDigest))...)
+			break
 		}
 
 		tflog.Info(ctx, "Retries remaining", map[string]any{"count": src.loginRetriesRemaining})
@@ -342,9 +367,10 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 			// report the resource as deleted forcing the create copy operation.
 			tflog.Warn(ctx, "Login errors during refresh, plan to recreate", map[string]any{"error": err.Error()})
 			d.SetId("")
-			return nil
 		}
 	}
+
+	return diagnosticsOut
 }
 
 func resourceSkopeo2CopyUpdate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
@@ -383,4 +409,34 @@ func resourceSkopeo2CopyDelete(ctx context.Context, d *schema.ResourceData, meta
 			return diag.FromErr(err)
 		}
 	}
+}
+
+func resourceSkopeo2CopyDiffFunc() schema.CustomizeDiffFunc {
+	return customdiff.ForceNewIf("docker_digest", func(ctx context.Context, d *schema.ResourceDiff, meta interface{}) bool {
+		preserveDigests, _ := d.GetOk("preserve_digests")
+		if !preserveDigests.(bool) {
+			// If we are not preserving digests, we cannot determine if a new copy is needed as there
+			// is no guarantee that the dest will have the same digest as the source
+			// Default to not force create and therefore not copy
+			return false
+		}
+		destDigest, ok := d.GetOk("docker_digest")
+		if !ok {
+			// Do the copy if there is no docker_digest in state, which means it's a new resource
+			return true
+		}
+		sourceDigest, ok := d.GetOk("source_digest")
+		if !ok {
+			// Do the copy if there is no source_digest in state, which can happen on a provider update
+			// because previous providers didn't have this state variable
+			return true
+		}
+
+		// Force new copy if the source and dest digests do not match
+		if sourceDigest.(string) != destDigest.(string) {
+			_ = d.SetNewComputed("docker_digest")
+			return true
+		}
+		return false
+	})
 }

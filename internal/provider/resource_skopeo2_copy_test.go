@@ -3,14 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	skopeoPkg "github.com/bsquare-corp/terraform-provider-skopeo2/pkg/skopeo"
-	"github.com/containers/common/pkg/auth"
-	"github.com/containers/common/pkg/retry"
-	"github.com/go-cmd/cmd"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -18,6 +10,17 @@ import (
 	"regexp"
 	"testing"
 	"time"
+
+	skopeoPkg "github.com/bsquare-corp/terraform-provider-skopeo2/pkg/skopeo"
+	"github.com/containers/common/pkg/auth"
+	"github.com/containers/common/pkg/retry"
+	"github.com/containers/image/v5/manifest"
+	"github.com/containers/image/v5/types"
+	"github.com/go-cmd/cmd"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
 
 const (
@@ -270,26 +273,51 @@ func TestAccResourceSkopeo2Login(t *testing.T) {
 	})
 }
 
+func getImageSource(imageName string) (types.ImageSource, error) {
+	ctx := context.Background()
+	imageOpts := skopeoPkg.ImageOptions{
+		DockerImageOptions: skopeoPkg.DockerImageOptions{
+			Global:       &skopeoPkg.GlobalOptions{},
+			Shared:       &skopeoPkg.SharedImageOptions{},
+			AuthFilePath: auth.GetDefaultAuthFile(),
+			Insecure:     true,
+		},
+	}
+	return skopeoPkg.ParseImageSource(ctx, &imageOpts, imageName)
+}
+
 func CheckImageInRegistry(imageName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		ctx := context.Background()
-		imageOpts := skopeoPkg.ImageOptions{
-			DockerImageOptions: skopeoPkg.DockerImageOptions{
-				Global:       &skopeoPkg.GlobalOptions{},
-				Shared:       &skopeoPkg.SharedImageOptions{},
-				AuthFilePath: auth.GetDefaultAuthFile(),
-				Insecure:     true,
-			},
-		}
-		src, err := skopeoPkg.ParseImageSource(ctx, &imageOpts, imageName)
+		src, err := getImageSource(imageName)
 		if err != nil {
 			return err
 		}
 		defer src.Close()
 
-		_, _, err = src.GetManifest(ctx, nil)
+		_, _, err = src.GetManifest(context.Background(), nil)
 		if err != nil {
 			return err
+		}
+		return nil
+	}
+}
+
+func CheckImageInRegistryWithDigest(imageName string, digest *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		src, err := getImageSource(imageName)
+		if err != nil {
+			return err
+		}
+		defer src.Close()
+
+		rawManifest, _, err := src.GetManifest(context.Background(), nil)
+		if err != nil {
+			return err
+		}
+
+		imageDigest, err := manifest.Digest(rawManifest)
+		if *digest != imageDigest.String() {
+			return fmt.Errorf("digest mismatch, %s != %s", *digest, imageDigest)
 		}
 		return nil
 	}
@@ -510,14 +538,17 @@ func TestAccResourceSkopeo2(t *testing.T) {
 				ExpectError: expectErrorRegExpr("Invalid image name"),
 			},
 			{
+				PreConfig:   logoutAll(),
 				Config:      testAccCopyResourceLoginFail(rName),
 				ExpectError: expectErrorRegExpr("login password script failed"),
 			},
 			{
+				PreConfig:   logoutAll(),
 				Config:      testAccCopyResourceLoginTimeoutSrc(rName),
 				ExpectError: expectErrorRegExpr("login password script timed out"),
 			},
 			{
+				PreConfig:   logoutAll(),
 				Config:      testAccCopyResourceLoginTimeoutDest(rName),
 				ExpectError: expectErrorRegExpr("login password script timed out"),
 			},
@@ -627,8 +658,8 @@ resource "skopeo2_copy" "testimage_bad_resource_%s" {
 func testAccCopyResourceLoginFail(name string) string {
 	return fmt.Sprintf(`
 resource "skopeo2_copy" "testimage_login_fail_%s" {
-    source_image = "docker://testimage-bad"
-    destination_image = "docker://127.0.0.1:9016/testimage-login-fail-%s"
+    source_image = "%s"
+    destination_image = "docker://127.0.0.1:9017/testimage-login-fail-%s"
     source {
       login_script = "false"
     }
@@ -636,14 +667,14 @@ resource "skopeo2_copy" "testimage_login_fail_%s" {
       login_script = "false"
     }
     insecure = true
-}`, name, name)
+}`, name, testSrcImageWithAuth, name)
 }
 
 func testAccCopyResourceLoginTimeoutDest(name string) string {
 	return fmt.Sprintf(`
 resource "skopeo2_copy" "testimage_login_timeout_dest_%s" {
-    source_image = "docker://testimage-bad"
-    destination_image = "docker://127.0.0.1:9016/testimage-login-timeout-dest-%s"
+    source_image = "%s"
+    destination_image = "docker://127.0.0.1:9017/testimage-login-timeout-dest-%s"
     source {
       login_script = "true"
     }
@@ -652,14 +683,14 @@ resource "skopeo2_copy" "testimage_login_timeout_dest_%s" {
 	  timeout = 2
     }
     insecure = true
-}`, name, name)
+}`, name, testSrcImage, name)
 }
 
 func testAccCopyResourceLoginTimeoutSrc(name string) string {
 	return fmt.Sprintf(`
 resource "skopeo2_copy" "testimage_login_timeout_src_%s" {
-    source_image = "docker://testimage-bad"
-    destination_image = "docker://127.0.0.1:9016/testimage-login-timeout-src-%s"
+    source_image = "%s"
+    destination_image = "docker://127.0.0.1:9017/testimage-login-timeout-src-%s"
     source {
       login_script = "sleep 5"
 	  timeout = 2
@@ -668,7 +699,7 @@ resource "skopeo2_copy" "testimage_login_timeout_src_%s" {
       login_script = "true"
     }
     insecure = true
-}`, name, name)
+}`, name, testSrcImageWithAuth, name)
 }
 
 func testAccCopyResource_withRetry(name string) string {
@@ -717,4 +748,158 @@ func TestAccResourceSkopeo2_ghcrMatch(t *testing.T) {
 			t.Errorf("Repository (%s) was detected as located in the Githib code repository", image)
 		}
 	}
+}
+
+func TestAccResourceSkopeo2_detectSourceUpdate(t *testing.T) {
+	rName := acctest.RandStringFromCharSet(10, acctest.CharSetAlphaNum)
+	firstDigest := ""
+	secondDigest := ""
+
+	buildAndPushImage := func(imageData string) string {
+		_, err := imageBuild(newDockerCli(context.Background()),
+			"updating-testimage-"+rName, imageData)
+		if err != nil {
+			t.Logf("err: %s", err)
+		}
+
+		aux, err := imagePush(newDockerCli(context.Background()), "updating-testimage-"+rName)
+		if err != nil {
+			t.Logf("err: %s", err)
+		}
+		if aux != nil {
+			return aux.Digest
+		}
+		return ""
+	}
+
+	buildAndPushFirstImage := func() string { return buildAndPushImage("test data to update") }
+	buildAndPushSecondImage := func() string { return buildAndPushImage("updated test data") }
+
+	generateConfig := func(preserveDigests string) string {
+		return `
+resource "skopeo2_copy" "updating_testimage_copy_resource_` + rName + `" {
+	source_image = "docker://127.0.0.1:9016/updating-testimage-` + rName + `:latest"
+	destination_image = "docker://127.0.0.1:9016/updating-testimage-copy-` + rName + `"
+	insecure = true
+	preserve_digests = ` + preserveDigests + `
+}`
+	}
+
+	testCheckSrcDestImageDigestFunc := func(dstDigest, srcDigest *string) resource.TestCheckFunc {
+		return resource.ComposeTestCheckFunc(
+			CheckImageInRegistryWithDigest("docker://127.0.0.1:9016/updating-testimage-copy-"+rName, dstDigest),
+			resource.TestCheckResourceAttrWith("skopeo2_copy.updating_testimage_copy_resource_"+rName,
+				"docker_digest", func(value string) error {
+					if *dstDigest != value {
+						return fmt.Errorf("docker_digest incorrect: %s, should be %s", value, *dstDigest)
+					}
+					return nil
+				},
+			),
+			resource.TestCheckResourceAttrWith("skopeo2_copy.updating_testimage_copy_resource_"+rName,
+				"source_digest", func(value string) error {
+					if *srcDigest != value {
+						return fmt.Errorf("source_digest incorrect: %s, should be %s", value, *srcDigest)
+					}
+					return nil
+				},
+			),
+		)
+	}
+
+	resource.UnitTest(t, resource.TestCase{
+		ProviderFactories: providerFactories,
+		Steps: []resource.TestStep{
+			{
+				// Check a plan is created to do the initial copy when using preserve_image
+				PreConfig: func() {
+					buildAndPushFirstImage()
+				},
+				Config:             generateConfig("true"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				// Plan and apply the copy, check the image reaches its destination and digests are set
+				PreConfig: func() {
+					firstDigest = buildAndPushFirstImage()
+				},
+				Config: generateConfig("true"),
+				Check:  testCheckSrcDestImageDigestFunc(&firstDigest, &firstDigest),
+			},
+			{
+				// Check that a second apply does not cause another copy
+				Config:             generateConfig("true"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				// Check that updating the source image is detected and a plan is created to copy it
+				PreConfig: func() {
+					buildAndPushSecondImage()
+				},
+				Config:             generateConfig("true"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				// Check that the updated image is copied and updated in the dest. Also check the
+				// digests have been updated
+				PreConfig: func() {
+					secondDigest = buildAndPushSecondImage()
+				},
+				Config: generateConfig("true"),
+				Check:  testCheckSrcDestImageDigestFunc(&secondDigest, &secondDigest),
+			},
+			{
+				// Tidy up
+				Config:  generateConfig("true"),
+				Destroy: true,
+			},
+
+			// Preserve_digests = false tests:
+
+			{
+				// Check a plan is created to do the initial copy when not using preserve_image
+				PreConfig: func() {
+					buildAndPushFirstImage()
+				},
+				Config:             generateConfig("false"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				// Plan and apply the copy, check the image reaches its destination and digests are set
+				PreConfig: func() {
+					firstDigest = buildAndPushFirstImage()
+				},
+				Config: generateConfig("false"),
+				Check:  testCheckSrcDestImageDigestFunc(&firstDigest, &firstDigest),
+			},
+			{
+				// Check that a second apply does not cause another copy
+				Config:             generateConfig("false"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				// Check that updating the source image is not detected and no plan is created to copy it
+				PreConfig: func() {
+					buildAndPushSecondImage()
+				},
+				Config:             generateConfig("false"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				// Check that the updated image is not copied or updated in the dest. Also check the
+				// dest digest has not changed but the source has
+				PreConfig: func() {
+					secondDigest = buildAndPushSecondImage()
+				},
+				Config: generateConfig("false"),
+				Check:  testCheckSrcDestImageDigestFunc(&firstDigest, &secondDigest),
+			},
+		},
+	})
 }

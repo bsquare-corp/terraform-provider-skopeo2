@@ -6,18 +6,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/pkg/archive"
 	"io"
 	"io/ioutil"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/pkg/archive"
+
 	"context"
+	"log"
+
 	"github.com/goombaio/namegenerator"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"log"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -71,16 +73,17 @@ func testAccPreCheck(t *testing.T) {
 	}
 
 	// create a test image
-	err = imageBuild(newDockerCli(context.Background()))
+	_, err = imageBuild(newDockerCli(context.Background()), "test-image", "test data")
 	if err != nil {
 		t.Logf("err: %s", err)
 	}
 
 	// push the test image to one of the registries
-	err = imagePush(newDockerCli(context.Background()))
+	aux, err := imagePush(newDockerCli(context.Background()), "test-image")
 	if err != nil {
 		t.Logf("err: %s", err)
 	}
+	t.Logf("aux: %v", *aux)
 }
 
 func newDockerCli(ctx context.Context) *client.Client {
@@ -204,7 +207,7 @@ func PruneContainers() error {
 	return nil
 }
 
-func imageBuild(dockerClient *client.Client) error {
+func imageBuild(dockerClient *client.Client, imageName, imageData string) (*ProgressAux, error) {
 
 	dir, err := os.MkdirTemp("", "test-image")
 	if err != nil {
@@ -219,7 +222,7 @@ func imageBuild(dockerClient *client.Client) error {
 		panic(err)
 	}
 
-	err = os.WriteFile(dir+"/test-file.txt", []byte("test data"), 0644)
+	err = os.WriteFile(dir+"/test-file.txt", []byte(imageData), 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -231,27 +234,22 @@ func imageBuild(dockerClient *client.Client) error {
 
 	tar, err := archive.TarWithOptions(dir, &archive.TarOptions{})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	opts := types.ImageBuildOptions{
 		Dockerfile: "Dockerfile",
-		Tags:       []string{dockerRegistryUserID + "/test-image"},
+		Tags:       []string{dockerRegistryUserID + "/" + imageName},
 		Remove:     true,
 	}
 	res, err := dockerClient.ImageBuild(ctx, tar, opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	defer res.Body.Close()
 
-	err = printDetails(res.Body)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return printDetails(res.Body)
 }
 
 type ErrorLine struct {
@@ -263,7 +261,18 @@ type ErrorDetail struct {
 	Message string `json:"message"`
 }
 
-func printDetails(rd io.Reader) error {
+type ProgressLine struct {
+	ProgressDetail any          `json:"progressDetail"`
+	Aux            *ProgressAux `json:"aux"`
+}
+
+type ProgressAux struct {
+	Tag    string `json:"Tag"`
+	Digest string `json:"Digest"`
+	Size   int    `json:"Size"`
+}
+
+func printDetails(rd io.Reader) (*ProgressAux, error) {
 	var lastLine string
 
 	scanner := bufio.NewScanner(rd)
@@ -275,14 +284,20 @@ func printDetails(rd io.Reader) error {
 	errLine := &ErrorLine{}
 	json.Unmarshal([]byte(lastLine), errLine)
 	if errLine.Error != "" {
-		return errors.New(errLine.Error)
+		return nil, errors.New(errLine.Error)
 	}
 
 	if err := scanner.Err(); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	progressLine := &ProgressLine{}
+	json.Unmarshal([]byte(lastLine), progressLine)
+	if progressLine.Aux != nil {
+		return progressLine.Aux, nil
+	}
+
+	return nil, nil
 }
 
 var authConfig = registrytypes.AuthConfig{
@@ -291,26 +306,21 @@ var authConfig = registrytypes.AuthConfig{
 	ServerAddress: "http://" + dockerRegistryUserID + "/v1/",
 }
 
-func imagePush(dockerClient *client.Client) error {
+func imagePush(dockerClient *client.Client, imageName string) (*ProgressAux, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*120)
 	defer cancel()
 
 	authConfigBytes, _ := json.Marshal(authConfig)
 	authConfigEncoded := base64.URLEncoding.EncodeToString(authConfigBytes)
 
-	tag := dockerRegistryUserID + "/test-image"
+	tag := dockerRegistryUserID + "/" + imageName
 	opts := image.PushOptions{RegistryAuth: authConfigEncoded}
 	rd, err := dockerClient.ImagePush(ctx, tag, opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	defer rd.Close()
 
-	err = printDetails(rd)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return printDetails(rd)
 }
