@@ -148,6 +148,7 @@ Supported transports:
 ### Read-Only
 
 - `id` (String) The ID of this resource.
+- `source_digest` (String) digest string of the source image.
 
 <a id="nestedblock--destination"></a>
 ### Nested Schema for `destination`
