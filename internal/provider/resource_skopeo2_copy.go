@@ -284,7 +284,9 @@ func isMissingInspectError(inspectErr error) bool {
 	//where as AWS ECR reports:
 	//"manifest unknown"
 	//This code is fragile but changes to the underlying library would be needed to improve on it.
-	return errors.Is(inspectErr, storage.ErrNoSuchImage) || strings.Contains(inspectErr.Error(), "manifest unknown")
+	return errors.Is(inspectErr, storage.ErrNoSuchImage) ||
+		strings.Contains(inspectErr.Error(), "manifest unknown") ||
+		strings.Contains(inspectErr.Error(), "name unknown")
 }
 
 func loginInspect(ctx context.Context, d *schema.ResourceData, sw *somewhere) (any, error) {
