@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -24,7 +25,7 @@ func New(version string) func() *schema.Provider {
 					Optional:    true,
 					MaxItems:    1,
 					Description: "Source image access credentials",
-					Elem:        &schema.Resource{Schema: SomewhereSchema("source", false)},
+					Elem:        &schema.Resource{Schema: SomewhereSchema("source", true)},
 				},
 				"destination": {
 					Type:        schema.TypeList,
@@ -32,7 +33,7 @@ func New(version string) func() *schema.Provider {
 					MaxItems:    1,
 					ForceNew:    true,
 					Description: "Destination image access credentials",
-					Elem:        &schema.Resource{Schema: SomewhereSchema("destination", false)},
+					Elem:        &schema.Resource{Schema: SomewhereSchema("destination", true)},
 				},
 			},
 		}
