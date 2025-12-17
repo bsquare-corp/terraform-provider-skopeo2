@@ -56,8 +56,9 @@ provider "skopeo2" {
     login_password = data.aws_ecr_authorization_token.source.password
   }
   destination {
-    login_username = data.aws_ecr_authorization_token.dest.user_name
-    login_password = data.aws_ecr_authorization_token.dest.password
+    login_username        = "AWS"
+    login_password_script = "aws ecr get-login-password --region eu-west-2"
+    login_retries         = 3
   }
 }
 
@@ -136,18 +137,42 @@ output "image_reference" {
   value       = docker_registry_image.textfile_image.name
 }
 
+resource "aws_ecr_repository" "bill" {
+  provider             = aws.dest
+  name                 = "copytest-bill"
+  image_tag_mutability = "MUTABLE"
+}
+
 resource "skopeo2_copy" "default" {
   provider = skopeo2.bill
 
   count = 5
 
-  //source_image      = "docker://753989949864.dkr.ecr.us-west-1.amazonaws.com/ecr-public/docker/library/busybox:uclibc"
-  source_image      = "docker://${docker_registry_image.textfile_image.name}"
-  destination_image = "docker://329020582682.dkr.ecr.eu-west-2.amazonaws.com/copytest:latest-${count.index}"
+  source_image = "docker://753989949864.dkr.ecr.us-west-1.amazonaws.com/ecr-public/docker/library/busybox:uclibc"
+  //source_image      = "docker://${docker_registry_image.textfile_image.name}"
+  destination_image = "docker://329020582682.dkr.ecr.eu-west-2.amazonaws.com/copytest-bill:latest-${count.index}"
 
   preserve_digests = true
   keep_image       = true
   copy_all_images  = true
+
+  depends_on = [
+    aws_ecr_repository.bill
+  ]
+}
+
+resource "aws_ecr_repository" "bob" {
+  provider             = aws.dest
+  name                 = "copytest-bob"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+}
+
+resource "aws_ecr_repository" "bob-mov" {
+  provider             = aws.dest
+  name                 = "copytest-bob-mov"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
 }
 
 resource "skopeo2_copy" "default2" {
@@ -157,9 +182,13 @@ resource "skopeo2_copy" "default2" {
 
   //source_image      = "docker://753989949864.dkr.ecr.us-west-1.amazonaws.com/ecr-public/docker/library/busybox:uclibc"
   source_image      = "docker://${docker_registry_image.textfile_image.name}"
-  destination_image = "docker://329020582682.dkr.ecr.eu-west-2.amazonaws.com/copytest:latest-${count.index}"
+  destination_image = "docker://329020582682.dkr.ecr.eu-west-2.amazonaws.com/copytest-bob-mov:latest-${count.index}"
 
   preserve_digests = true
   keep_image       = true
   copy_all_images  = true
+
+  depends_on = [
+    aws_ecr_repository.bob-mov
+  ]
 }
