@@ -68,7 +68,7 @@ func resourceSkopeo2Copy() *schema.Resource {
 						return swSchema
 					}(),
 				},
-				Deprecated: "Configure the source block at the Provider Configuration level and the" +
+				Deprecated: "Configure the source block at the Provider Configuration level and use" +
 					" source_image instead. This attribute will be removed in the next major version of the provider.",
 			},
 			"source_image": {
@@ -96,7 +96,7 @@ func resourceSkopeo2Copy() *schema.Resource {
 						return swSchema
 					}(),
 				},
-				Deprecated: "Configure the destination block at the Provider Configuration level and the" +
+				Deprecated: "Configure the destination block at the Provider Configuration level and use" +
 					" destination_image instead. This attribute will be removed in the next major version of the provider.",
 			},
 			"destination_image": {
@@ -316,6 +316,9 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 
 	for {
 		result, err := loginInspect(ctx, d, dst)
+		if err != nil {
+			diagnosticsOut = append(diagnosticsOut, diag.FromErr(err)...)
+		}
 
 		if err == nil {
 			if result == nil {
@@ -335,18 +338,22 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 			// report the resource as deleted forcing the create copy operation.
 			tflog.Warn(ctx, "Login errors during refresh, plan to recreate", map[string]any{"error": err.Error()})
 			d.SetId("")
+			return append(diagnosticsOut, diag.Errorf("Exhausted %d dest login/retries", dst.loginRetries)...)
 		}
 	}
 
 	src, err := getSomewhereParamsOverriding(d, "source", config.source)
 	if err != nil {
-		return diag.FromErr(err)
+		return append(diagnosticsOut, diag.FromErr(err)...)
 	}
 
 	src.loginRetriesRemaining = src.loginRetries + 1
 
 	for {
 		result, err := loginInspect(ctx, d, src)
+		if err != nil {
+			diagnosticsOut = append(diagnosticsOut, diag.FromErr(err)...)
+		}
 
 		if err == nil {
 			if result == nil {
@@ -367,6 +374,7 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 			// report the resource as deleted forcing the create copy operation.
 			tflog.Warn(ctx, "Login errors during refresh, plan to recreate", map[string]any{"error": err.Error()})
 			d.SetId("")
+			return append(diagnosticsOut, diag.Errorf("Exhausted %d source login/retries", src.loginRetries)...)
 		}
 	}
 
