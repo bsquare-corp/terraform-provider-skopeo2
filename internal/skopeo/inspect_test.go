@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	skopeoPkg "github.com/bsquare-corp/terraform-provider-skopeo2/pkg/skopeo"
+	"github.com/containers/common/pkg/retry"
 )
 
 func TestInspect(t *testing.T) {
@@ -19,6 +20,7 @@ func TestInspect(t *testing.T) {
 				Shared: &skopeoPkg.SharedImageOptions{},
 			},
 		},
+		RetryOpts: &retry.RetryOptions{},
 	})
 	if err != nil {
 		t.Fatal(err)
