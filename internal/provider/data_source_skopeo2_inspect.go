@@ -183,10 +183,7 @@ func dataSourceSkopeo2InspectRead(ctx context.Context, d *schema.ResourceData, m
 
 		tflog.Info(ctx, "Retries remaining", map[string]any{"count": src.loginRetriesRemaining})
 		if src.loginRetriesRemaining <= 0 {
-			// If we get an error the problem may be because the login script has changed, swallow the error and
-			// report the resource as deleted forcing the create copy operation.
 			tflog.Warn(ctx, "Login errors during read", map[string]any{"error": err.Error()})
-			d.SetId("")
 			return append(diagnosticsOut, diag.Errorf("Exhausted %d source login/retries", src.loginRetries)...)
 		}
 	}
