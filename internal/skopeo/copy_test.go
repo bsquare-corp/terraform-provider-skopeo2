@@ -9,6 +9,7 @@ import (
 
 	"github.com/bsquare-corp/terraform-provider-skopeo2/internal/providerlog"
 	skopeoPkg "github.com/bsquare-corp/terraform-provider-skopeo2/pkg/skopeo"
+	"github.com/containers/common/pkg/retry"
 )
 
 func TestCopy(t *testing.T) {
@@ -41,6 +42,7 @@ func TestCopy(t *testing.T) {
 				},
 			},
 		},
+		RetryOpts: &retry.RetryOptions{},
 	})
 	if err != nil {
 		t.Fatal(err)
