@@ -340,7 +340,7 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 
 		tflog.Info(ctx, "Retries remaining", map[string]any{"count": dst.loginRetriesRemaining})
 		if dst.loginRetriesRemaining <= 0 {
-			// If we get an error the problem may be because the login script has changed, swallow the error and
+			// If we get an error the problem may be because the login script has changed,
 			// report the resource as deleted forcing the create copy operation.
 			tflog.Warn(ctx, "Login errors during refresh, plan to recreate", map[string]any{"error": err.Error()})
 			d.SetId("")
@@ -376,7 +376,7 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 
 		tflog.Info(ctx, "Retries remaining", map[string]any{"count": src.loginRetriesRemaining})
 		if src.loginRetriesRemaining <= 0 {
-			// If we get an error the problem may be because the login script has changed, swallow the error and
+			// If we get an error the problem may be because the login script has changed,
 			// report the resource as deleted forcing the create copy operation.
 			tflog.Warn(ctx, "Login errors during refresh, plan to recreate", map[string]any{"error": err.Error()})
 			d.SetId("")
