@@ -16,6 +16,9 @@ func init() {
 func New(version string) func() *schema.Provider {
 	return func() *schema.Provider {
 		p := &schema.Provider{
+			DataSourcesMap: map[string]*schema.Resource{
+				"skopeo2_inspect": dataSourceSkopeo2Inspect(),
+			},
 			ResourcesMap: map[string]*schema.Resource{
 				"skopeo2_copy": resourceSkopeo2Copy(),
 			},
