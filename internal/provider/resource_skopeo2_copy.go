@@ -289,8 +289,8 @@ func isMissingInspectError(inspectErr error) bool {
 		strings.Contains(inspectErr.Error(), "name unknown")
 }
 
-func loginInspect(ctx context.Context, d *schema.ResourceData, sw *somewhere) (any, error) {
-	return sw.WithEndpointLogin(ctx, d, false, func(_ bool) (any, error) {
+func loginInspect(ctx context.Context, d *schema.ResourceData, sw *somewhere) (*skopeo.InspectOutput, error) {
+	result, err := sw.WithEndpointLogin(ctx, d, false, func(_ bool) (any, error) {
 		tflog.Debug(ctx, "Inspecting", map[string]any{"image": sw.image})
 		result, err := skopeo.Inspect(ctx, sw.image, newInspectOptions(d, sw))
 		if err != nil {
@@ -304,6 +304,10 @@ func loginInspect(ctx context.Context, d *schema.ResourceData, sw *somewhere) (a
 
 		return result, nil
 	})
+	if result != nil {
+		return result.(*skopeo.InspectOutput), err
+	}
+	return nil, err
 }
 
 func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
@@ -328,7 +332,7 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 				d.SetId("")
 				break
 			}
-			dstDigest := result.(*skopeo.InspectOutput).Digest
+			dstDigest := result.Digest
 			tflog.Info(ctx, "Inspection", map[string]any{"image": dst.image, "digest": dstDigest})
 			diagnosticsOut = append(diagnosticsOut, diag.FromErr(d.Set("docker_digest", dstDigest))...)
 			break
@@ -364,7 +368,7 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 				break
 			}
 
-			srcDigest := result.(*skopeo.InspectOutput).Digest
+			srcDigest := result.Digest
 			tflog.Info(ctx, "Inspection", map[string]any{"image": src.image, "digest": srcDigest})
 			diagnosticsOut = append(diagnosticsOut, diag.FromErr(d.Set("source_digest", srcDigest))...)
 			break
