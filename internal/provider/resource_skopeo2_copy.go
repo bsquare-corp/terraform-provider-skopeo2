@@ -200,7 +200,7 @@ func getSomewhereParamsOverriding(d *schema.ResourceData, key string, other *som
 	sw.Overriding(other)
 
 	if !sw.HasImage() {
-		return nil, fmt.Errorf("No " + key + " image specified in any of the alternative locations.")
+		return nil, fmt.Errorf("no %s image specified in any of the alternative locations", key)
 	}
 
 	return sw, nil
