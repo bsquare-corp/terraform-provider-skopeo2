@@ -192,3 +192,14 @@ resource "skopeo2_copy" "default2" {
     aws_ecr_repository.bob-mov
   ]
 }
+
+data "skopeo2_inspect" "default" {
+  provider = skopeo2.bill
+
+  //  source_image = skopeo2_copy.default.0.destination_image
+  source_image = "docker://753989949864.dkr.ecr.us-west-1.amazonaws.com/ecr-public/docker/library/busybox:uclibc"
+}
+
+output "inspect" {
+  value = data.skopeo2_inspect.default
+}
