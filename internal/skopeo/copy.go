@@ -69,6 +69,13 @@ func Copy(ctx context.Context, sourceImageName, destinationImageName string, opt
 		return nil, err
 	}
 
+	// Skopeo ignores DOCKER_HOST by default, it has to be set explicitly
+	// for the docker-daemon transport to work with it.
+	if dockerHost, found := os.LookupEnv("DOCKER_HOST"); found {
+		sourceCtx.DockerDaemonHost = dockerHost
+		destinationCtx.DockerDaemonHost = dockerHost
+	}
+
 	var manifestType string
 	if opts.format != "" {
 		manifestType, err = skopeoPkg.ParseManifestFormat(opts.format)
