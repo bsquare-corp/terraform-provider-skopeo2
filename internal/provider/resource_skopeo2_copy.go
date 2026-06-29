@@ -322,10 +322,6 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 
 	for {
 		result, err := loginInspect(ctx, d, dst)
-		if err != nil {
-			diagnosticsOut = append(diagnosticsOut, diag.FromErr(err)...)
-		}
-
 		if err == nil {
 			if result == nil {
 				// Destination image does not exist
@@ -344,7 +340,11 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 			// report the resource as deleted forcing the create copy operation.
 			tflog.Warn(ctx, "Login errors during refresh, plan to recreate", map[string]any{"error": err.Error()})
 			d.SetId("")
-			return append(diagnosticsOut, diag.Errorf("Exhausted %d dest login/retries", dst.loginRetries)...)
+			return append(diagnosticsOut, diag.Diagnostic{
+				Severity: diag.Warning,
+				Summary:  "Destination login failed during refresh; resource will be recreated",
+				Detail:   fmt.Sprintf("Exhausted %d dest login/retries: %v", dst.loginRetries, err),
+			})
 		}
 	}
 
@@ -357,10 +357,6 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 
 	for {
 		result, err := loginInspect(ctx, d, src)
-		if err != nil {
-			diagnosticsOut = append(diagnosticsOut, diag.FromErr(err)...)
-		}
-
 		if err == nil {
 			if result == nil {
 				// Source image does not exist
@@ -380,7 +376,11 @@ func resourceSkopeo2CopyRead(ctx context.Context, d *schema.ResourceData, meta a
 			// report the resource as deleted forcing the create copy operation.
 			tflog.Warn(ctx, "Login errors during refresh, plan to recreate", map[string]any{"error": err.Error()})
 			d.SetId("")
-			return append(diagnosticsOut, diag.Errorf("Exhausted %d source login/retries", src.loginRetries)...)
+			return append(diagnosticsOut, diag.Diagnostic{
+				Severity: diag.Warning,
+				Summary:  "Source login failed during refresh; resource will be recreated",
+				Detail:   fmt.Sprintf("Exhausted %d source login/retries: %v", src.loginRetries, err),
+			})
 		}
 	}
 
