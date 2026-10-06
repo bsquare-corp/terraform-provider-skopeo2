@@ -3,8 +3,10 @@ package skopeo
 import (
 	"context"
 	"fmt"
-	skopeoPkg "github.com/bsquare-corp/terraform-provider-skopeo2/pkg/skopeo"
 	"io"
+	"os"
+
+	skopeoPkg "github.com/bsquare-corp/terraform-provider-skopeo2/pkg/skopeo"
 
 	"github.com/containers/common/pkg/retry"
 	"github.com/containers/image/v5/copy"
