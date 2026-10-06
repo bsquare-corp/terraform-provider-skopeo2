@@ -175,4 +175,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/containers/image/v5 => github.com/bsquare-corp/image/v5 v5.0.0-20240820111250-569cc07591dc
+replace github.com/containers/image/v5 => github.com/bsquare-corp/image/v5 v5.0.0-20261006151720-972779cbc69b
