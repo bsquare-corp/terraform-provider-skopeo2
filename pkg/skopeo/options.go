@@ -35,3 +35,9 @@ func (opts *GlobalOptions) newSystemContext() *types.SystemContext {
 	}
 	return ctx
 }
+
+func (opts *GlobalOptions) SetOverrides(arch, os, variant string) {
+	opts.overrideArch = arch
+	opts.overrideOS = os
+	opts.overrideVariant = variant
+}

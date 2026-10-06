@@ -49,6 +49,9 @@ func newDeleteOptions(d *schema.ResourceData, dst *somewhere) *skopeoPkg.DeleteO
 
 func newGlobalOptions() *skopeoPkg.GlobalOptions {
 	opts := &skopeoPkg.GlobalOptions{}
+	// By setting the overrides to "any", we ensure that the image inspection phase will work for
+	// images targeting any platform
+	opts.SetOverrides("any", "any", "any")
 	return opts
 }
 
