@@ -573,6 +573,13 @@ func TestAccResourceSkopeo2(t *testing.T) {
 						"docker_digest", regexp.MustCompile(`^sha256`)),
 				),
 			},
+			{
+				Config: testAccCopyResource_copyWinImageOnLinux(rName),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(fmt.Sprintf("skopeo2_copy.test_copy_windows_image_on_linux_host_%s", rName),
+						"docker_digest"),
+				),
+			},
 		},
 	})
 }
@@ -722,6 +729,18 @@ resource "skopeo2_copy" "testimage_add_tag_%s" {
 	keep_image        = true
     insecure          = true
 }`, name, testSrcImage, name)
+}
+
+func testAccCopyResource_copyWinImageOnLinux(name string) string {
+	return fmt.Sprintf(`
+resource "skopeo2_copy" "test_copy_windows_image_on_linux_host_%s" {
+  source_image      = "docker://mcr.microsoft.com/windows/nanoserver:ltsc2025"
+  destination_image = "oci-archive:nanoserver-%s.tar"
+
+  copy_all_images = true
+  keep_image = true
+}
+`, name, name)
 }
 
 func TestAccResourceSkopeo2_ghcrMatch(t *testing.T) {
