@@ -12,8 +12,7 @@ require (
 	github.com/docker/distribution v2.8.3+incompatible
 	github.com/docker/docker v27.1.2+incompatible
 	github.com/docker/go-connections v0.5.0
-	github.com/go-cmd/cmd v1.4.2
-	github.com/goombaio/namegenerator v0.0.0-20181006234301-989e774b106e
+	github.com/go-cmd/cmd v1.4.3
 	github.com/hashicorp/go-cty v1.5.0
 	github.com/hashicorp/terraform-plugin-docs v0.16.0
 	github.com/hashicorp/terraform-plugin-log v0.10.0
