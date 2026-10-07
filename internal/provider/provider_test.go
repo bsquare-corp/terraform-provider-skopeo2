@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -18,7 +17,6 @@ import (
 	"context"
 	"log"
 
-	"github.com/goombaio/namegenerator"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 
 	"github.com/docker/docker/api/types"
@@ -115,37 +113,50 @@ func ListContainer() error {
 }
 
 func StartLocalRegistry(hostPort string, htpasswd string) (string, error) {
-	// htpasswd file to mount into the container when it is started
-	htpasswdFile := "/tmp/htpasswd" + hostPort
-	err := os.WriteFile(htpasswdFile, []byte(htpasswd), 0644)
-	if err != nil {
-		log.Fatal(err)
+	cli := newDockerCli(context.Background())
+
+	// Reuse an already-running registry if it is listening on this port.
+	// This avoids port conflicts and preserves a running registry.
+	containers, err := cli.ContainerList(context.Background(), container.ListOptions{All: true})
+	if err == nil {
+		for _, c := range containers {
+			if c.State != "running" {
+				continue
+			}
+			inspect, err := cli.ContainerInspect(context.Background(), c.ID)
+			if err != nil {
+				continue
+			}
+			for port, bindings := range inspect.NetworkSettings.Ports {
+				if port.Int() == 5000 {
+					for _, b := range bindings {
+						if b.HostIP == "127.0.0.1" && b.HostPort == hostPort {
+							log.Printf("Reusing running registry container %s on %s", c.ID, hostPort)
+							return c.ID, nil
+						}
+					}
+				}
+			}
+		}
 	}
 
-	cli := newDockerCli(context.Background())
+	htpasswdFile := "/tmp/htpasswd" + hostPort
+	if err := os.WriteFile(htpasswdFile, []byte(htpasswd), 0644); err != nil {
+		return "", err
+	}
 
 	resp, err := cli.ImagePull(context.Background(), "registry:2", image.PullOptions{})
 	if err != nil {
-		log.Println("Unable to pull")
 		return "", err
 	}
-	_, err = ioutil.ReadAll(resp)
-	if err != nil {
-		return "", err
-	}
+	_, _ = io.Copy(io.Discard, resp)
+	_ = resp.Close()
 
-	hostBinding := nat.PortBinding{
-		HostIP:   "127.0.0.1",
-		HostPort: hostPort,
-	}
+	hostBinding := nat.PortBinding{HostIP: "127.0.0.1", HostPort: hostPort}
 	containerPort, err := nat.NewPort("tcp", "5000")
 	if err != nil {
-		log.Println("Unable to get newPort")
 		return "", err
 	}
-
-	seed := time.Now().UTC().UnixNano()
-	nameGenerator := namegenerator.NewNameGenerator(seed)
 
 	portBinding := nat.PortMap{containerPort: []nat.PortBinding{hostBinding}}
 
@@ -160,25 +171,21 @@ func StartLocalRegistry(hostPort string, htpasswd string) (string, error) {
 
 	cont, err := cli.ContainerCreate(
 		context.Background(),
-		&container.Config{
-			Image: "registry:2",
-			Env:   env,
-		},
+		&container.Config{Image: "registry:2", Env: env},
 		&container.HostConfig{
 			PortBindings: portBinding,
 			Binds:        []string{htpasswdFile + ":/htpasswd"},
-		}, nil, nil, nameGenerator.Generate())
+		}, nil, nil, "",
+	)
 	if err != nil {
-		log.Println("ContainerCreate failed")
 		return "", err
 	}
 
-	err = cli.ContainerStart(context.Background(), cont.ID, container.StartOptions{})
-	if err != nil {
-		log.Println("ContainerStart failed")
+	if err := cli.ContainerStart(context.Background(), cont.ID, container.StartOptions{}); err != nil {
 		return "", err
 	}
-	log.Printf("Container %s has been started\n", cont.ID)
+
+	log.Printf("Started registry container %s on %s", cont.ID, hostPort)
 	return cont.ID, nil
 }
 
