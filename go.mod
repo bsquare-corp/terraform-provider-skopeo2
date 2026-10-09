@@ -9,7 +9,7 @@ require (
 	github.com/containers/storage v1.55.0
 	github.com/docker/distribution v2.8.3+incompatible
 	github.com/docker/docker v27.1.2+incompatible
-	github.com/docker/go-connections v0.5.0
+	github.com/docker/go-connections v0.8.1
 	github.com/go-cmd/cmd v1.4.3
 	github.com/hashicorp/go-cty v1.5.0
 	github.com/hashicorp/terraform-plugin-docs v0.25.0
